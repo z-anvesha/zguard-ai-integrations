@@ -14,7 +14,8 @@ CLINE_HOOKS := UserPromptSubmit PreToolUse PostToolUse TaskComplete
 
 .PHONY: help deps-gha deps-windsurf deps-cline deps-cursor \
 	compile-anthropic compile-cursor compile-cline compile-windsurf \
-	compile-github-actions compile-jenkins test-compile \
+	compile-github-actions compile-jenkins compile-openai compile-aws \
+	compile-google test-compile \
 	run-policy-gha run-policy-jenkins \
 	test-policy-gha test-policy-jenkins test-policy-all \
 	test-cursor test-cline test-windsurf test-all check
@@ -33,7 +34,7 @@ help:
 	@echo 'Zscaler AI Guard - make targets'
 	@echo ""
 	@echo "  make check / test-compile   All compile-* targets (syntax, no API)"
-	@echo "  make compile-anthropic|cursor|cline|windsurf|github-actions|jenkins  Per-vendor syntax"
+	@echo "  make compile-anthropic|cursor|cline|windsurf|github-actions|jenkins|openai|aws|google  Per-vendor syntax"
 	@echo "  make deps-gha               pip install github-actions/requirements.txt"
 	@echo "  make run-policy-gha         Run scan only (use after deps-gha; CI uses this)"
 	@echo "  make run-policy-jenkins     Jenkins/ copy scan only"
@@ -76,7 +77,20 @@ compile-jenkins:
 	@echo "==> Syntax — Jenkins declarative-pipeline scripts"
 	cd "$(ROOT)" && $(PYTHON) -m compileall -q Jenkins/declarative-pipeline/scripts
 
-test-compile: compile-anthropic compile-cursor compile-cline compile-windsurf compile-github-actions compile-jenkins
+compile-openai:
+	@echo "==> Syntax — OpenAI Codex hooks"
+	cd "$(ROOT)" && $(PYTHON) -m compileall -q OpenAI/codex-hooks/.codex/hooks
+
+compile-aws:
+	@echo "==> Syntax — AWS components"
+	cd "$(ROOT)" && $(PYTHON) -m compileall -q AWS
+
+compile-google:
+	@echo "==> Syntax — Google provisioning and test scripts"
+	cd "$(ROOT)" && $(PYTHON) -m compileall -q Google/apigee/deploy.py Google/cloudrun
+
+test-compile: compile-anthropic compile-cursor compile-cline compile-windsurf \
+	compile-github-actions compile-jenkins compile-openai compile-aws compile-google
 	@echo "==> test-compile OK"
 
 deps-gha:

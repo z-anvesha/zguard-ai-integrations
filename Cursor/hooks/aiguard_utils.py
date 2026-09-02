@@ -1,7 +1,7 @@
 """
 Zscaler AI Guard — shared utilities for Cursor IDE hooks.
 
-Uses the same client pattern as Anthropic Claude Code hooks: `LegacyZGuardClient`
+Uses the same client pattern as Anthropic Claude Code hooks: `LegacyAIGuardClient`
 from `zscaler.oneapi_client` with `execute_policy` / `resolve_and_execute_policy`.
 
 `LegacyZGuardClientHelper` reads `AIGUARD_OVERRIDE_URL` from the environment when set
@@ -66,19 +66,17 @@ def log_message(message: str) -> None:
 
 
 def get_client_config() -> dict[str, Any]:
-    """Build LegacyZGuardClient config (matches Anthropic `aiguard_utils`)."""
+    """Build LegacyAIGuardClient config (matches Anthropic `aiguard_utils`)."""
     timeout = int(os.environ.get("AIGUARD_TIMEOUT", "3"))
     return {
         "api_key": os.environ.get("AIGUARD_API_KEY", "").strip().strip('"').strip("'"),
         "cloud": os.environ.get("AIGUARD_CLOUD", "us1").strip().strip('"').strip("'"),
         "timeout": timeout,
-        "auto_retry_on_rate_limit": True,
-        "max_rate_limit_retries": 3,
     }
 
 
 def get_policy_id() -> Optional[int]:
-    raw = os.environ.get("AIGUARD_POLICY_ID", "").strip()
+    raw = os.environ.get("AIGUARD_POLICY_ID", "").strip().strip('"').strip("'")
     if not raw:
         return None
     try:
@@ -110,9 +108,13 @@ def get_blocking_detectors(detector_responses: Any) -> list[str]:
 
 def scan_content(content: str, direction: str) -> dict[str, Any]:
     """
-    Scan via AI Guard. On error, returns ALLOW + error (fail-open).
+    Scan via AI Guard.
+
+    On failure the returned dict carries ``error`` and no verdict. Callers must
+    treat that as a block: a scan that did not complete is not permission, and
+    only the upstream policy decides what is allowed.
     """
-    from zscaler.oneapi_client import LegacyZGuardClient
+    from zscaler.oneapi_client import LegacyAIGuardClient
 
     result: dict[str, Any] = {
         "action": "ALLOW",
@@ -132,16 +134,16 @@ def scan_content(content: str, direction: str) -> dict[str, Any]:
     policy_id = get_policy_id()
 
     try:
-        with LegacyZGuardClient(cfg) as client:
+        with LegacyAIGuardClient(cfg) as client:
             if policy_id is not None:
-                api_result, _r, error = client.zguard.policy_detection.execute_policy(
+                api_result, _r, error = client.aiguard.policy_detection.execute_policy(
                     content=content,
                     direction=direction,
                     policy_id=policy_id,
                 )
             else:
                 api_result, _r, error = (
-                    client.zguard.policy_detection.resolve_and_execute_policy(
+                    client.aiguard.policy_detection.resolve_and_execute_policy(
                         content=content,
                         direction=direction,
                     )
@@ -151,7 +153,12 @@ def scan_content(content: str, direction: str) -> dict[str, Any]:
                 result["error"] = str(error)
                 return result
 
-            act = api_result.action or "ALLOW"
+            if not api_result.action:
+                result["error"] = "scan returned no action verdict (%s)" % (
+                    getattr(api_result, "error_msg", None)
+                    or "statusCode=%s" % getattr(api_result, "status_code", None))
+                return result
+            act = api_result.action
             result["action"] = str(act).upper()
             result["severity"] = getattr(api_result, "severity", None)
             result["transaction_id"] = getattr(api_result, "transaction_id", None)

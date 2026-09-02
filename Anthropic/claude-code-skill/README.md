@@ -95,7 +95,7 @@ Add the following to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
 export AIGUARD_API_KEY="your-api-key-here"
 export AIGUARD_CLOUD="us1"
 # Optional:
-# export AIGUARD_POLICY_ID="12345"
+# export AIGUARD_POLICY_ID="<id>"   # rarely needed; unset = auto-resolve
 ```
 
 Or copy the environment template:

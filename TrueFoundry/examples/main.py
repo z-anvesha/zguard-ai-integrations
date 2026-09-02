@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from zscaler.zaiguard.legacy import LegacyZGuardClientHelper
+from zscaler.aiguard.legacy import LegacyZGuardClientHelper
 
 app = FastAPI(title="Zscaler AI Guard Guardrail Server")
 
@@ -88,6 +88,22 @@ def _scan(content: str, direction: str, transaction_id: str):
     return result
 
 
+#: Verdicts that let traffic through. DETECT is AI Guard's monitor-only action:
+#: reported and logged upstream, deliberately not enforced.
+ALLOWED_ACTIONS = ("ALLOW", "DETECT")
+
+
+def _is_blocked(result) -> bool:
+    """Fail-closed: block on anything that is not an explicit ALLOW or DETECT.
+
+    A missing action is not permission. The API reports soft failures — most
+    commonly `404 "Policy not found"` — inside an HTTP 200 with no action at
+    all, so treating a falsy action as "allowed" silently disables scanning.
+    """
+    action = _get_attr(result, "action")
+    return str(action or "").upper() not in ALLOWED_ACTIONS
+
+
 def _build_block_detail(result, direction: str, transaction_id: str) -> dict:
     action = _get_attr(result, "action", "BLOCK")
     severity = _get_attr(result, "severity", "unknown")
@@ -143,9 +159,8 @@ def input_scan(request: InputGuardrailRequest):
 
     txn_id = str(uuid.uuid4())
     result = _scan(content, "IN", txn_id)
-    action = _get_attr(result, "action")
 
-    if action and str(action).upper() != "ALLOW":
+    if _is_blocked(result):
         detail = _build_block_detail(result, "IN", txn_id)
         raise HTTPException(status_code=400, detail=detail)
 
@@ -168,9 +183,8 @@ def output_scan(request: OutputGuardrailRequest):
 
     txn_id = str(uuid.uuid4())
     result = _scan(content, "OUT", txn_id)
-    action = _get_attr(result, "action")
 
-    if action and str(action).upper() != "ALLOW":
+    if _is_blocked(result):
         detail = _build_block_detail(result, "OUT", txn_id)
         raise HTTPException(status_code=400, detail=detail)
 

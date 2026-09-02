@@ -129,7 +129,7 @@ export AIGUARD_API_KEY="your-aiguard-api-key"
 # export AIGUARD_CLOUD="us1"
 
 # Optional: specific policy ID
-# export AIGUARD_POLICY_ID="760"
+# export AIGUARD_POLICY_ID="<id>"   # rarely needed; unset = auto-resolve
 ```
 
 Add these to `~/.zshrc` or `~/.bashrc`. The scripts also load a `.env` file from the project root if present.
@@ -177,7 +177,11 @@ tail -f Cursor/hooks/aiguard.log
 
 ### Timeout
 
-All AI Guard API calls are capped at **3 seconds** (`AIGUARD_TIMEOUT` env var). On timeout or network error, hooks fail open.
+All AI Guard API calls are capped at **3 seconds** (`AIGUARD_TIMEOUT` env var).
+On timeout, network error, or any response that carries no verdict, the hooks
+**fail closed** — the action is blocked rather than allowed. A scan that cannot
+complete is not permission, and a gateway that allows traffic when it cannot get
+a verdict only looks like protection.
 
 ---
 
@@ -227,13 +231,13 @@ Never emits `permission`, never emits `additional_context`, never exits 2.
 
 ### Python SDK (`zscaler-sdk-python`)
 
-All hooks use the `LegacyZGuardClient` from `zscaler-sdk-python`, the same client used by the [Anthropic Claude Code integration](../Anthropic/). This replaces raw `curl` calls with proper SDK-based scanning:
+All hooks use the `LegacyAIGuardClient` from `zscaler-sdk-python`, the same client used by the [Anthropic Claude Code integration](../Anthropic/). This replaces raw `curl` calls with proper SDK-based scanning:
 
 ```python
-from zscaler.oneapi_client import LegacyZGuardClient
+from zscaler.oneapi_client import LegacyAIGuardClient
 
-with LegacyZGuardClient(cfg) as client:
-    result, response, error = client.zguard.policy_detection.resolve_and_execute_policy(
+with LegacyAIGuardClient(cfg) as client:
+    result, response, error = client.aiguard.policy_detection.resolve_and_execute_policy(
         content=text,
         direction="IN",
     )
@@ -243,7 +247,10 @@ with LegacyZGuardClient(cfg) as client:
 
 All hooks import from `aiguard_utils.py` which provides:
 
-- **`scan_content(content, direction)`** — SDK-based scanning with fail-open error handling
+- **`scan_content(content, direction)`** — SDK-based scanning. On any failure it
+  returns `error` set and **no verdict**, including for an HTTP 200 that carries
+  no `action` (the shape a soft failure such as `"Policy not found"` takes).
+  Every caller treats that as a block.
 - **`get_client_config()`** — Reads `AIGUARD_API_KEY`, `AIGUARD_CLOUD`, `AIGUARD_TIMEOUT` from environment
 - **`get_policy_id()`** — Routes to `execute_policy` vs `resolve_and_execute_policy`
 - **`get_triggered_detectors()` / `get_blocking_detectors()`** — Parse `detectorResponses`
@@ -323,7 +330,18 @@ Tool inputs and outputs are truncated to **20,000 characters** before sending to
 
 ### API Dependency
 
-Hooks require network access to the AI Guard API. All hooks **fail open** on timeout or error by default. Set `failClosed: true` in `hooks.json` to block when hooks error out.
+Hooks require network access to the AI Guard API, and **fail closed** at both
+layers:
+
+- **Inside the hook** — a timeout, a network error, or a response carrying no
+  verdict blocks the action.
+- **In `hooks.json`** — `failClosed: true` covers the case the hook cannot
+  handle itself: the hook process crashing or exceeding Cursor's own `timeout`.
+  Left at `false`, a hook that dies silently allows the action it was meant to
+  scan.
+
+Set `failClosed: false` only if you consciously prefer availability over
+enforcement.
 
 ---
 

@@ -39,20 +39,23 @@ AI Guard uses a **DAS pattern** where each AI application integrates independent
 - ✅ Platform-specific optimizations
 - ✅ Scales naturally with applications
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed explanation.
+See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for detailed explanation.
 
 ## Available Integrations
 
 | Platform | Type | Status | Documentation |
 |----------|------|--------|---------------|
 | **Claude Code** | Hooks (Python) | ✅ Complete | [Guide](./Anthropic/claude-code-aiguard/) |
+| **OpenAI Codex CLI** | Hooks (Python) | ✅ Complete | [Guide](./OpenAI/codex-hooks/) |
 | **Azure AI Gateway** | APIM Policy Fragment | ✅ Complete | [Guide](./Microsoft/) |
 | **Cursor IDE** | Hooks (Python) | ✅ Complete | [Guide](./Cursor/) |
 | **Cline** | VS Code hooks (Python) | ✅ Complete | [Guide](./Cline/) |
 | **Windsurf** | Cascade hooks (Python) | ✅ Complete | [Guide](./Windsurf/) |
 | **GitHub Actions** | CI/CD Pipeline (Python) | ✅ Complete | [Guide](./github-actions/) |
 | **Jenkins** | Declarative Pipeline (Python) | ✅ Complete | [Guide](./Jenkins/declarative-pipeline/) |
-| **Google Apigee X** | API Proxy | ✅ Complete | [Guide](./Google/apigee-vertex-aiguard/) |
+| **Google Apigee X** | API Proxy + SharedFlow | ✅ Complete | [Guide](./Google/apigee/) |
+| **Google Cloud Run** | Provisioning pipelines (Python) | ✅ Complete | [Guide](./Google/cloudrun/) |
+| **AWS Bedrock / Lambda / Strands** | SDK hooks, decorator, agent wrapper (Python) | ✅ Complete | [Guide](./AWS/) |
 | **Kong Gateway** | Lua Plugin | ✅ Complete | [Guide](./Kong/) |
 | **LiteLLM** | Native Plugin + Python Callback | ✅ Complete | [Guide](./LiteLLM/) · [Official Docs](https://docs.litellm.ai/docs/proxy/guardrails/zscaler_ai_guard) |
 | **NeMo Guardrails** | Library Plugin (Python) | ✅ Complete | [Guide](./NemoGuardrails/) |
@@ -250,6 +253,45 @@ SCAN 2: URL Check
 User sees: "Blocked by AI Guard: Malicious URL detected"
 ```
 
+### Enforcement Posture
+
+Every integration in this repository **fails closed**. Anything that prevents a
+verdict blocks the action rather than allowing it:
+
+| Verdict | Outcome |
+|---------|---------|
+| `ALLOW` | allowed |
+| `DETECT` | allowed — monitor-only: reported and logged, not enforced |
+| `BLOCK` | blocked |
+| No API key configured | blocked |
+| API unreachable, timeout, or network error | blocked |
+| HTTP 401/403 — bad or revoked key | blocked |
+| **HTTP 200 carrying no `action`** | blocked |
+| Any unrecognised verdict | blocked |
+
+The bolded row is the one that catches people out. A soft failure — most often
+`"Policy not found"` when a stale `AIGUARD_POLICY_ID` names a policy your key
+cannot use — arrives as an HTTP **200** with no `action` field. Reading that as
+permission silently disables scanning while every integration still looks
+healthy.
+
+Blocks name their cause, so a configuration problem is distinguishable from a
+content decision:
+
+```json
+{"error": "ZSCALER AI GUARD: REQUEST BLOCKED", "action": "",
+ "scan_status": "404", "scan_detail": "Policy not found"}
+```
+
+Two deliberate exceptions, both platform constraints rather than choices:
+
+- **Windsurf and Cline post-hooks** and the **Codex `Stop` hook** are audit-only, because those events cannot block by design. They report and log.
+- **Unclassifiable gateway traffic** — a request body no walker recognises — is passed unscanned unless `failClosedOnUnknown` is set.
+
+> ⚠️ **Leave `AIGUARD_POLICY_ID` unset unless you have a specific reason.** Unset,
+> the API resolves the policy bound to your key. Setting a stale ID fails closed
+> on every request, in a way that reads like an outage rather than a typo.
+
 ## AI Guard Configuration
 
 ### Get API Credentials
@@ -307,6 +349,11 @@ View: Full scan details, triggered detectors, content samples
 [2026-01-30 15:30:00] BLOCKED USER PROMPT: severity=CRITICAL policy=Default_Policy detectors=[toxicity] (txn:abc123...)
 ```
 
+**OpenAI Codex CLI**: `.codex/hooks/aiguard.log`
+```
+[2026-09-01 10:39:13] BLOCKED USER INPUT: action=BLOCK, severity=CRITICAL, policy=Default_Policy, txn=abc123..., blocking=[toxicity]
+```
+
 **Azure APIM**: Azure Monitor / Application Insights
 ```
 403 Forbidden responses
@@ -316,20 +363,22 @@ Error rates
 
 ## Documentation
 
-- **[Architecture Overview](./ARCHITECTURE.md)** - DAS pattern and design decisions
-- **[Agentic AI Integration](./AGENTIC_AI_INTEGRATION.md)** - Multi-agent systems
-- **[Setup Summary](./SETUP_SUMMARY.md)** - Quick reference
+- **[Architecture Overview](./docs/ARCHITECTURE.md)** - DAS pattern and design decisions
+- **[Agentic AI Integration](./docs/AGENTIC_AI_INTEGRATION.md)** - Multi-agent systems
 
 ### Platform-Specific Docs
 
 - **[Claude Code](./Anthropic/claude-code-aiguard/README.md)** - Detailed installation
+- **[OpenAI Codex CLI](./OpenAI/codex-hooks/README.md)** - Codex hooks integration
 - **[Cursor IDE](./Cursor/README.md)** - Cursor hooks integration
 - **[Cline](./Cline/README.md)** - Cline VS Code hooks
 - **[Windsurf](./Windsurf/README.md)** - Windsurf Cascade hooks
 - **[GitHub Actions](./github-actions/README.md)** - CI/CD policy validation
 - **[Jenkins](./Jenkins/declarative-pipeline/README.md)** - Declarative pipeline policy validation
 - **[Azure AI Gateway](./Microsoft/README.md)** - Azure APIM policy fragment integration
-- **[Google Apigee](./Google/apigee-vertex-aiguard/README.md)** - Apigee + Vertex AI proxy
+- **[Google Apigee](./Google/apigee/README.md)** - Apigee + Vertex AI: inline proxy and reusable SharedFlow
+- **[Google Cloud Run](./Google/cloudrun/README.md)** - Cloud Build → Cloud Run Job provisioning pipelines
+- **[AWS](./AWS/README.md)** - Bedrock AgentCore, Lambda decorator, boto3 hooks, Strands Agents
 - **[Kong Gateway](./Kong/README.md)** - Lua plugin and Konnect callout
 - **[LiteLLM](./LiteLLM/README.md)** - Native plugin ([official docs](https://docs.litellm.ai/docs/proxy/guardrails/zscaler_ai_guard)) + SDK callback
 - **[NeMo Guardrails](./NemoGuardrails/README.md)** - NVIDIA NeMo library plugin
@@ -379,7 +428,9 @@ Contributions welcome! Particularly interested in:
 - [x] Windsurf Cascade hooks
 - [x] GitHub Actions CI/CD pipeline
 - [x] Jenkins Declarative Pipeline
-- [x] Google Apigee X proxy
+- [x] Google Apigee X proxy and SharedFlow
+- [x] Google Cloud Run provisioning pipelines
+- [x] AWS Bedrock, Lambda and Strands Agents
 - [x] Kong Gateway Lua plugin
 - [x] LiteLLM proxy callback
 - [x] NVIDIA NeMo Guardrails plugin
@@ -406,6 +457,6 @@ Part of the Zscaler AI Guard integrations repository.
 
 - [Get Started with Claude Code](./Anthropic/claude-code-aiguard/)
 - [Get Started with Azure AI Gateway](./Microsoft/README.md)
-- [Architecture Documentation](./ARCHITECTURE.md)
+- [Architecture Documentation](./docs/ARCHITECTURE.md)
 - [AI Guard Console](https://admin.us1.zseclipse.net)
 - [Zscaler SDK Python](https://github.com/zscaler/zscaler-sdk-python)

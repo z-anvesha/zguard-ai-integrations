@@ -6,10 +6,16 @@ Runtime security hooks for Claude Code that scan prompts, MCP tool calls, and re
 
 This integration provides transparent security scanning for Claude Code interactions:
 
-- **User Input Scanning** - Scans prompts before they reach Claude LLM
-- **MCP Tool Call Scanning** - Scans tool parameters before calling MCP servers
-- **Response Scanning** - Scans tool responses before returning to user
-- **URL Scanning** - Scans URLs before web requests
+- **User Input Scanning** (`scan_user_input.py`, IN) - Scans prompts before they reach Claude LLM
+- **MCP Tool Call Scanning** (`scan_mcp_request.py`, IN) - Scans tool parameters before calling MCP servers
+- **Response Scanning** (`scan_response.py`, OUT) - Scans tool responses before returning to user
+- **URL Scanning** (`scan_url.py`, OUT) - Scans URLs before web requests
+- **File Read Scanning** (`scan_file_read.py`, IN) - Scans sensitive files before Claude reads them; ships with the integration but is **not** enabled by the bundled `settings.json` (see below)
+
+Hooks signal a block two different ways, depending on the Claude Code event contract:
+`scan_user_input.py` exits **2**, while the `PreToolUse`/`PostToolUse` hooks exit **0**
+and emit `{"continue": false, ...}` on stdout. Both are normal — when testing by hand,
+check stdout, not just the exit code.
 
 ## Architecture
 
@@ -36,20 +42,40 @@ User sees result
 ## Prerequisites
 
 - **Claude Code** CLI installed
-- **Python 3.8+** with `zscaler-sdk-python` installed
+- **Python 3.8+** with `zscaler-sdk-python` **1.9.44 or newer**
 - **Zscaler AI Guard** account with:
   - API Key
   - Cloud environment (us1, us2, eu1, eu2)
   - Policy configured and activated
+
+> **Why 1.9.44+:** releases up to 1.9.42 never attached the Bearer token to AI Guard
+> policy-detection calls (the legacy dispatch branch was missing in
+> `oneapi_http_client.send_request`), so every scan failed with
+> `401 Unauthorized - token refresh attempts exhausted or OAuth not available`.
+> The hooks rely on the fix and no longer carry a workaround.
 
 ## Installation
 
 ### 1. Install Dependencies
 
 ```bash
-# Install Zscaler SDK
-pip install git+https://github.com/zscaler/zscaler-sdk-python.git
+pip install 'zscaler-sdk-python>=1.9.44'
 ```
+
+The hooks use the public entry point `LegacyAIGuardClient`, reached as
+`client.aiguard.policy_detection`:
+
+```python
+from zscaler.oneapi_client import LegacyAIGuardClient
+
+with LegacyAIGuardClient({"api_key": key, "cloud": "us1", "timeout": 30}) as client:
+    result, _, error = client.aiguard.policy_detection.resolve_and_execute_policy(
+        content="text to scan", direction="IN",
+    )
+```
+
+There is no `LegacyZGuardClient` class and no `zscaler.zaiguard` module — those were
+pre-release names. `client.zguard` still works as a deprecated alias for `client.aiguard`.
 
 ### 2. Configure Environment Variables
 
@@ -73,7 +99,7 @@ AIGUARD_API_KEY=your_api_key_here
 AIGUARD_CLOUD=us1
 
 # Optional
-AIGUARD_POLICY_ID=760
+# AIGUARD_POLICY_ID=   # leave unset: the API auto-resolves
 AIGUARD_TIMEOUT=30
 ```
 
@@ -91,7 +117,7 @@ Add to your `~/.zshrc` or `~/.bashrc`:
 ```bash
 export AIGUARD_API_KEY="your_api_key_here"
 export AIGUARD_CLOUD="us1"
-export AIGUARD_POLICY_ID="760"  # Optional
+# export AIGUARD_POLICY_ID="<id>"   # rarely needed; unset = auto-resolve
 export AIGUARD_TIMEOUT="30"     # Optional
 ```
 
@@ -112,14 +138,12 @@ chmod +x ~/.claude/hooks/aiguard/*.py
 
 ### 4. Configure Claude Code Hooks
 
-Copy the hook configuration to Claude Code settings:
+`~/.claude/settings.json` usually holds unrelated settings (enabled plugins, model
+preferences, notification options). **Merge** the `hooks` key into it — do not copy
+this file over the top, which would discard everything else:
 
 ```bash
-# Backup existing settings
-cp ~/.claude/settings.json ~/.claude/settings.json.backup 2>/dev/null || true
-
-# Copy hook configuration
-cp settings.json ~/.claude/settings.json
+python3 -c "import json,os,shutil; d=os.path.expanduser('~/.claude/settings.json'); shutil.copy(d,d+'.backup'); c=json.load(open(d)); c['hooks']=json.load(open('settings.json'))['hooks']; json.dump(c,open(d,'w'),indent=2); print('merged; backup at',d+'.backup')"
 ```
 
 Or manually add to `~/.claude/settings.json`:
@@ -190,17 +214,15 @@ Or manually add to `~/.claude/settings.json`:
 4. Set detector actions to **BLOCK** or **DETECT**
 5. **Activate** the policy
 
-### Get Policy ID (Optional)
+### Enable Auto-Resolution (do this)
 
-If policy auto-resolution isn't working:
+**Leave `AIGUARD_POLICY_ID` unset.** Most users do not know their policy id and do
+not need it: the API resolves the policy bound to your API key. Setting one
+switches the hooks to `/v1/detection/execute-policy`, and an id that does not exist
+for your key comes back as `"Policy not found"` — inside an HTTP 200, which is why
+a typo here is so easy to miss.
 
-1. View your policy in the console
-2. Note the Policy ID (e.g., 760)
-3. Set `AIGUARD_POLICY_ID=760` in your environment
-
-### Enable Auto-Resolution (Recommended)
-
-To avoid specifying policy_id:
+To make auto-resolution work:
 
 1. Go to **Private AI Apps** → **Applications**
 2. Create or select an application
@@ -265,9 +287,21 @@ Severity: CRITICAL | Transaction ID: xxx
 |----------|----------|---------|-------------|
 | `AIGUARD_API_KEY` | ✅ Yes | - | API key from AI Guard Console |
 | `AIGUARD_CLOUD` | ✅ Yes | `us1` | Cloud environment (us1, us2, eu1, eu2) |
-| `AIGUARD_POLICY_ID` | No | Auto-resolve | Specific policy ID to use |
+| `AIGUARD_POLICY_ID` | No | Auto-resolve | Pins scanning to one policy — see warning below |
 | `AIGUARD_TIMEOUT` | No | `30` | API timeout in seconds |
-| `SECURITY_LOG_PATH` | No | `~/.claude/hooks/aiguard/security.log` | Custom log file location |
+| `SECURITY_LOG_PATH` | No | `~/.claude/hooks/aiguard/security.log` | Custom log file location (`~` is expanded) |
+
+> ⚠️ **`AIGUARD_POLICY_ID` overrides auto-resolution and changes what gets caught.**
+> Setting it switches the hooks from `resolve-and-execute-policy` to
+> `execute-policy` against that exact ID. If the ID is stale or belongs to a more
+> permissive policy, scanning silently weakens — content that the auto-resolved
+> policy blocks will sail through, with no error to indicate anything is wrong.
+> Leave it unset unless auto-resolution is genuinely not configured for your key.
+
+The hooks load these from `~/.claude/hooks/aiguard/.env` (or the integration root
+`.env`) at import time. Values may be quoted or unquoted; surrounding quotes are
+stripped, so `AIGUARD_POLICY_ID="1152"` and `AIGUARD_POLICY_ID=1152` behave the same.
+Variables already present in the environment always win over the `.env` file.
 
 ### Hook Matchers
 
@@ -336,9 +370,17 @@ The hooks use regex patterns to match tool calls:
 
 3. Test manually:
    ```bash
-   echo '{"prompt":"test"}' | python3 ~/.claude/hooks/aiguard/scan_user_input.py
-   echo $?  # Should be 0 (allow) or 2 (block)
+   echo '{"prompt":"test"}' | python3 ~/.claude/hooks/aiguard/scan_user_input.py; echo "exit=$?"
    ```
+   Exit `0` = allowed, `2` = blocked. An `ImportError` naming `LegacyZGuardClient`
+   means the installed copy under `~/.claude/hooks/aiguard/` is stale — recopy the
+   hooks from this directory (installation step 3).
+
+4. Check the tool hooks, which block via stdout rather than exit code:
+   ```bash
+   echo '{"tool_name":"mcp__x__y","tool_input":{"body":"test"}}' | python3 ~/.claude/hooks/aiguard/scan_mcp_request.py
+   ```
+   A block prints a JSON object containing `"continue": false`.
 
 ### API Key Not Found
 
@@ -362,23 +404,94 @@ source ~/.zshrc
 Error: `Policy: None` in logs
 
 **Solution**: Either:
-1. Set `AIGUARD_POLICY_ID` explicitly, OR
+1. Associate the API key with an application and policy so auto-resolution works (preferred), OR
 2. Configure API Key → Application → Policy association in AI Guard Console
 
 ### Content Not Being Blocked
 
 1. Verify detector is enabled and set to **BLOCK** (not DETECT)
 2. Check policy is **activated**
-3. Verify policy ID is correct
-4. Check security log for actual response from AI Guard
+3. **Unset `AIGUARD_POLICY_ID`** and retest — a stale ID silently pins scanning to
+   the wrong policy (see the warning in Configuration Options)
+4. **Check the direction.** A policy can allow `OUT` while blocking `IN`. Prompt,
+   MCP-request, and file-read scanning use `direction=IN`; URL and response
+   scanning use `direction=OUT`. If only some hooks appear to block, compare both:
+
+   ```bash
+   python3 ../claude-code-skill/scripts/scan.py --type prompt   --content "test phrase"
+   python3 ../claude-code-skill/scripts/scan.py --type response --content "test phrase"
+   ```
+5. Check security log for the actual response from AI Guard
+
+### Everything Is Blocked (including "hello")
+
+If ordinary prompts are blocked with **`0 detectors triggered`** and a severity but
+no detector names, the policy itself is denying unconditionally — the hooks are
+working and faithfully reporting the API verdict. Confirm independently:
+
+```bash
+python3 -c "
+import os
+from zscaler.oneapi_client import LegacyAIGuardClient
+with LegacyAIGuardClient({'api_key': os.environ['AIGUARD_API_KEY'], 'cloud': os.environ.get('AIGUARD_CLOUD','us1')}) as c:
+    r, _, e = c.aiguard.policy_detection.resolve_and_execute_policy(content='hello', direction='IN')
+    print(r.action, r.severity, r.policy_name, sum(1 for d in r.detector_responses.values() if d.triggered), 'triggered')
+"
+```
+
+If that prints `BLOCK` for `hello`, fix the rule in the AI Guard Console so it
+blocks on detector hits rather than by default. **Do not register the
+`UserPromptSubmit` hook until this is resolved** — every prompt you type will be
+blocked and Claude Code becomes unusable.
+
+### Nothing Appears in the Security Log
+
+Older versions used `SECURITY_LOG_PATH` verbatim, so a value starting with `~`
+created a directory literally named `~` in whatever directory Claude Code was
+launched from, hiding every log line there. The path is now expanded properly. If
+you have a stray `~` directory from an earlier install, delete it:
+
+```bash
+find . -maxdepth 1 -name '~' -type d
+```
 
 ## Security Considerations
 
-### Fail-Open Behavior
+### Fail-Closed Behavior
 
-The hooks are configured to **fail-open** (allow on error) to prevent blocking Claude Code if AI Guard is unavailable. This is a trade-off between security and availability.
+The hooks **fail closed**: anything that prevents a verdict blocks the action
+rather than allowing it.
 
-To change to fail-closed, modify the hook scripts to return `sys.exit(2)` on errors.
+| Situation | Outcome |
+|-----------|---------|
+| `ALLOW` | allowed |
+| `DETECT` | allowed — monitor-only: reported and logged, not enforced |
+| `BLOCK` | blocked |
+| `AIGUARD_API_KEY` not set | blocked |
+| AI Guard API unreachable, or a network error | blocked |
+| HTTP 401/403 (bad or revoked key) | blocked |
+| HTTP 200 carrying no `action` | blocked |
+| Any unrecognised verdict | blocked |
+
+The last two matter most, because they look like success. A verdict-less 200 is
+the shape a soft failure takes — `"Policy not found"` when `AIGUARD_POLICY_ID`
+names a policy your key cannot use — and reading it as permission silently
+disables scanning while the hooks appear healthy.
+
+Every block names its cause, so a configuration problem is distinguishable from
+a content decision:
+
+```
+🛑 BLOCKED BY ZSCALER AI GUARD
+Zscaler AI Guard is not configured (AIGUARD_API_KEY is not set),
+so your prompt could not be scanned.
+```
+
+**This is a deliberate trade-off:** if AI Guard is unreachable, Claude Code stops
+until it is reachable again. If you would rather keep working during an outage,
+unhook the scanners (comment them out of `settings.json`) instead of weakening
+them — a hook that allows whatever it cannot scan provides no protection while
+still looking like it does.
 
 ### API Key Protection
 
@@ -398,17 +511,41 @@ Security logs contain request/response samples. Ensure:
 
 ```
 ~/.claude/
-├── settings.json              # Hook configuration
+├── settings.json                # Hook configuration (merge, never overwrite)
 └── hooks/
     └── aiguard/
-        ├── .env               # Your credentials (not in repo)
-        ├── load_env.py        # Environment variable loader
-        ├── scan_user_input.py # User prompt scanner
-        ├── scan_mcp_request.py# MCP tool call scanner
-        ├── scan_url.py        # URL scanner
-        ├── scan_response.py   # Response scanner
-        └── security.log       # Security event log
+        ├── .env                 # Your credentials (not in repo)
+        ├── load_env.py          # Environment variable loader
+        ├── aiguard_utils.py     # Shared client/config/logging helpers
+        ├── notification_helper.py # Optional desktop notifications
+        ├── scan_user_input.py   # User prompt scanner        (IN)
+        ├── scan_mcp_request.py  # MCP tool call scanner      (IN)
+        ├── scan_file_read.py    # Sensitive file scanner     (IN, opt-in)
+        ├── scan_url.py          # URL scanner                (OUT)
+        ├── scan_response.py     # Response scanner           (OUT)
+        └── security.log         # Security event log
 ```
+
+### Optional: enable file-read scanning
+
+`scan_file_read.py` is not wired up by the bundled `settings.json`. To scan
+sensitive files (`.env`, `.pem`, SSH keys, credentials) before Claude reads them,
+add this entry to the `PreToolUse` array:
+
+```json
+{
+  "matcher": "Read",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "python3 ~/.claude/hooks/aiguard/scan_file_read.py"
+    }
+  ]
+}
+```
+
+It only scans paths matching its sensitive-file patterns; everything else is
+allowed without an API call.
 
 ## Support
 

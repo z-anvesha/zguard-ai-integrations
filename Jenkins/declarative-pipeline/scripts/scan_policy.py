@@ -6,7 +6,7 @@ Runs a suite of test prompts/responses against the AI Guard API to validate
 that security policies produce the expected ALLOW/BLOCK/DETECT outcomes.
 Exits non-zero if any test case fails, gating deployment.
 
-Uses zscaler-sdk-python (LegacyZGuardClient) — same SDK pattern as the
+Uses zscaler-sdk-python (LegacyAIGuardClient) — same SDK pattern as the
 Anthropic, Cursor, and GitHub Actions integrations.
 """
 
@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 import yaml
 from dotenv import load_dotenv
-from zscaler.oneapi_client import LegacyZGuardClient
+from zscaler.oneapi_client import LegacyAIGuardClient
 
 load_dotenv()
 
@@ -43,8 +43,6 @@ def get_client_config() -> dict[str, Any]:
         "api_key": api_key,
         "cloud": cloud,
         "timeout": timeout,
-        "auto_retry_on_rate_limit": True,
-        "max_rate_limit_retries": 3,
     }
 
 
@@ -59,7 +57,7 @@ def get_policy_id() -> Optional[int]:
 
 
 def scan_content(
-    client: LegacyZGuardClient,
+    client: LegacyAIGuardClient,
     content: str,
     direction: str,
     policy_id: Optional[int] = None,
@@ -77,14 +75,14 @@ def scan_content(
 
     try:
         if policy_id is not None:
-            api_result, _resp, error = client.zguard.policy_detection.execute_policy(
+            api_result, _resp, error = client.aiguard.policy_detection.execute_policy(
                 content=content,
                 direction=direction,
                 policy_id=policy_id,
             )
         else:
             api_result, _resp, error = (
-                client.zguard.policy_detection.resolve_and_execute_policy(
+                client.aiguard.policy_detection.resolve_and_execute_policy(
                     content=content,
                     direction=direction,
                 )
@@ -94,7 +92,13 @@ def scan_content(
             result["error"] = str(error)
             return result
 
-        result["action"] = str(api_result.action or "ALLOW").upper()
+        if not api_result.action:
+            result["error"] = "scan returned no action verdict (%s)" % (
+                getattr(api_result, "error_msg", None)
+                or "statusCode=%s" % getattr(api_result, "status_code", None))
+            result["action"] = "BLOCK"
+            return result
+        result["action"] = str(api_result.action).upper()
         result["severity"] = getattr(api_result, "severity", None)
         result["transaction_id"] = getattr(api_result, "transaction_id", None)
         result["policy_name"] = getattr(api_result, "policy_name", None)
@@ -255,7 +259,7 @@ def main() -> int:
     skipped_count = 0
     optional_warn_count = 0
 
-    with LegacyZGuardClient(cfg) as client:
+    with LegacyAIGuardClient(cfg) as client:
         for idx, case in enumerate(test_cases, start=1):
             total += 1
             name = case.get("name", f"Test #{idx}")

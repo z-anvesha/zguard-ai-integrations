@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  The pinned-policy variant of SC-AIGuardScan, selected only when
+  aiguard.cfg.policyId is set. Same request message and posture; the body
+  already carries policyId.
+
+  Prefer the auto-resolve path: a policy id that does not exist for the key comes
+  back as "Policy not found" inside an HTTP 200, which JS-ProcessVerdict treats
+  as no verdict and fails closed on.
+-->
+<ServiceCallout continueOnError="true" enabled="true" name="SC-AIGuardExecutePolicy">
+  <DisplayName>SC-AIGuardExecutePolicy</DisplayName>
+  <Request variable="aiguardScanRequest">
+    <IgnoreUnresolvedVariables>false</IgnoreUnresolvedVariables>
+  </Request>
+  <Response>aiguardScanResponse</Response>
+  <Timeout>5000</Timeout>
+  <HTTPTargetConnection>
+    <URL>https://{aiguard.cfg.endpoint}/v1/detection/execute-policy</URL>
+    <Properties/>
+  </HTTPTargetConnection>
+</ServiceCallout>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  FlowCallout into ZSCALER-AIGUARD with type=response-prompt.
+  Used in the response path to scan the model output before returning to client.
+-->
+<FlowCallout continueOnError="false" enabled="true" name="FC-CallAIGuardOutput">
+  <DisplayName>FC-CallAIGuardOutput</DisplayName>
+  <FaultRules/>
+  <Parameters>
+    <Parameter name="type">response-prompt</Parameter>
+  </Parameters>
+  <SharedFlowBundle>ZSCALER-AIGUARD</SharedFlowBundle>
+</FlowCallout>

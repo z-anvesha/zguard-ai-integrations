@@ -579,19 +579,6 @@ Optionally include `"policyId": 760` to target a specific policy. If omitted, AI
 2. Check AI Guard Console logs
 3. Look in blocked response JSON
 
-## 🔄 Migration from Prisma AIRS
-
-If migrating from Prisma AIRS to Zscaler AI Guard:
-
-| Prisma AIRS | Zscaler AI Guard |
-|-------------|------------------|
-| `AIRS-API` named value | `AIGUARD-API-KEY` named value |
-| `x-pan-token` header | `Authorization: Bearer` header |
-| `profile_name` | `policyId` |
-| `prompt_detected` | `detectorResponses` |
-| `response_detected` | `detectorResponses` |
-| `/v1/scan/sync/request` | `/v1/detection/resolve-and-execute-policy` |
-
 ## 📚 Additional Resources
 
 - [AI Guard Documentation](https://help.zscaler.com/ai-guard)

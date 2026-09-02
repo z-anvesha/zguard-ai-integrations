@@ -85,7 +85,7 @@ def get_client_config() -> dict[str, Any]:
 
 
 def get_policy_id() -> Optional[int]:
-    raw = os.environ.get("AIGUARD_POLICY_ID", "").strip()
+    raw = os.environ.get("AIGUARD_POLICY_ID", "").strip().strip('"').strip("'")
     if not raw:
         return None
     try:
@@ -116,7 +116,7 @@ def get_blocking_detectors(detector_responses: Any) -> list[str]:
 
 
 def scan_content(content: str, direction: str) -> dict[str, Any]:
-    from zscaler.oneapi_client import LegacyZGuardClient
+    from zscaler.oneapi_client import LegacyAIGuardClient
 
     result: dict[str, Any] = {
         "action": "ALLOW",
@@ -136,16 +136,16 @@ def scan_content(content: str, direction: str) -> dict[str, Any]:
     policy_id = get_policy_id()
 
     try:
-        with LegacyZGuardClient(cfg) as client:
+        with LegacyAIGuardClient(cfg) as client:
             if policy_id is not None:
-                api_result, _r, error = client.zguard.policy_detection.execute_policy(
+                api_result, _r, error = client.aiguard.policy_detection.execute_policy(
                     content=content,
                     direction=direction,
                     policy_id=policy_id,
                 )
             else:
                 api_result, _r, error = (
-                    client.zguard.policy_detection.resolve_and_execute_policy(
+                    client.aiguard.policy_detection.resolve_and_execute_policy(
                         content=content,
                         direction=direction,
                     )
@@ -155,7 +155,12 @@ def scan_content(content: str, direction: str) -> dict[str, Any]:
                 result["error"] = str(error)
                 return result
 
-            act = api_result.action or "ALLOW"
+            if not api_result.action:
+                result["error"] = "scan returned no action verdict (%s)" % (
+                    getattr(api_result, "error_msg", None)
+                    or "statusCode=%s" % getattr(api_result, "status_code", None))
+                return result
+            act = api_result.action
             result["action"] = str(act).upper()
             result["severity"] = getattr(api_result, "severity", None)
             result["transaction_id"] = getattr(api_result, "transaction_id", None)

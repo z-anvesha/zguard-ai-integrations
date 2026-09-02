@@ -27,7 +27,7 @@ def load_env():
                 if "=" in line:
                     key, value = line.split("=", 1)
                     key = key.strip()
-                    value = value.strip()
+                    value = value.strip().strip('"').strip("'")
                     if key and value and key not in os.environ:
                         os.environ[key] = value
     except Exception:
@@ -36,14 +36,14 @@ def load_env():
 
 load_env()
 
-from zscaler.oneapi_client import LegacyZGuardClient
+from zscaler.oneapi_client import LegacyAIGuardClient
 
 
 def get_log_file() -> Path:
     log_path = os.environ.get(
         "SECURITY_LOG_PATH", os.path.expanduser("~/.claude/hooks/aiguard/security.log")
     )
-    log_file = Path(log_path)
+    log_file = Path(os.path.expanduser(log_path))
     log_file.parent.mkdir(parents=True, exist_ok=True)
     return log_file
 
@@ -60,14 +60,17 @@ def get_client_config() -> dict:
         "api_key": os.environ.get("AIGUARD_API_KEY"),
         "cloud": os.environ.get("AIGUARD_CLOUD", "us1"),
         "timeout": int(os.environ.get("AIGUARD_TIMEOUT", "30")),
-        "auto_retry_on_rate_limit": True,
-        "max_rate_limit_retries": 3,
     }
 
 
 def get_policy_id():
-    policy_id = os.environ.get("AIGUARD_POLICY_ID")
-    return int(policy_id) if policy_id else None
+    raw = os.environ.get("AIGUARD_POLICY_ID", "").strip().strip('"').strip("'")
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 def get_triggered_detectors(detector_responses: dict) -> list:
@@ -93,24 +96,30 @@ def extract_url(input_json: dict) -> str:
 def scan_url(url: str, policy_id: int = None) -> tuple:
     config = get_client_config()
     if not config["api_key"]:
-        log_message("ERROR: AIGUARD_API_KEY not set")
-        return False, None, {}
+        log_message("ERROR: AIGUARD_API_KEY not set - blocking (fail-closed)")
+        return True, ("Zscaler AI Guard is not configured (AIGUARD_API_KEY is "
+                      f"not set), so this URL could not be scanned.\nURL: {url}"), {}
     try:
-        with LegacyZGuardClient(config) as client:
+        with LegacyAIGuardClient(config) as client:
             if policy_id:
-                result, response, error = client.zguard.policy_detection.execute_policy(
+                result, response, error = client.aiguard.policy_detection.execute_policy(
                     content=url, direction="OUT", policy_id=policy_id
                 )
             else:
                 result, response, error = (
-                    client.zguard.policy_detection.resolve_and_execute_policy(
+                    client.aiguard.policy_detection.resolve_and_execute_policy(
                         content=url, direction="OUT"
                     )
                 )
             if error:
-                log_message(f"ERROR: AI Guard API error for URL scan: {error}")
-                return False, None, {}
-            action = result.action or "ALLOW"
+                log_message(f"ERROR: AI Guard API error for URL scan: {error} - blocking (fail-closed)")
+                return True, ("Zscaler AI Guard could not scan this URL "
+                              f"(API error: {error}).\nURL: {url}"), {}
+            # Fail closed on a null action: a 200 carrying statusCode 404
+            # ("Policy not found") would otherwise read as ALLOW.
+            action = str(result.action or "").upper()
+            if not action:
+                action = "BLOCK"
             severity = result.severity or "NONE"
             transaction_id = result.transaction_id or "unknown"
             policy_name = f"policy_{policy_id}" if policy_id else "auto-resolved"
@@ -134,8 +143,9 @@ def scan_url(url: str, policy_id: int = None) -> tuple:
                 log_message(f"ALLOWED URL: {url} (txn:{transaction_id})")
                 return False, None, {}
     except Exception as e:
-        log_message(f"ERROR: Exception during URL scan: {str(e)}")
-        return False, None, {}
+        log_message(f"ERROR: Exception during URL scan: {str(e)} - blocking (fail-closed)")
+        return True, ("Zscaler AI Guard could not scan this URL "
+                      f"({type(e).__name__}: {e}).\nURL: {url}"), {}
 
 
 def main():

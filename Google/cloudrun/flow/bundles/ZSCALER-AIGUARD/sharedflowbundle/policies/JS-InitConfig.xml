@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Phase 1: resolve config (phase, endpoint, policy id, fail mode, detector descriptions) from flow variables and KVM. -->
+<Javascript name="JS-InitConfig" timeLimit="5000">
+  <DisplayName>JS-InitConfig</DisplayName>
+  <IncludeURL>jsc://aiguard-lib.js</IncludeURL>
+  <ResourceURL>jsc://init-config.js</ResourceURL>
+</Javascript>

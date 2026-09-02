@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Reads the AI Guard API key (and an optional pinned policy id) from the
+  env-scoped encrypted KVM `aiguard-config`. Cached 300s.
+
+  aiguard_policy_id is optional and normally absent: with no policy id the flow
+  calls /v1/detection/resolve-and-execute-policy and the API resolves the policy
+  bound to the key.
+-->
+<KeyValueMapOperations continueOnError="false" enabled="true" name="KVM-GetAIGuardConfig" mapIdentifier="aiguard-config">
+  <DisplayName>KVM-GetAIGuardConfig</DisplayName>
+  <Properties/>
+  <ExpiryTimeInSecs>300</ExpiryTimeInSecs>
+  <Get assignTo="aiguard.token">
+    <Key><Parameter>aiguard_api_key</Parameter></Key>
+  </Get>
+  <Get assignTo="aiguard.policyId">
+    <Key><Parameter>aiguard_policy_id</Parameter></Key>
+  </Get>
+  <Scope>environment</Scope>
+</KeyValueMapOperations>

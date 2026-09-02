@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Reads configuration from the env-scoped encrypted KVM `aiguard-config` — the
+  same map and key names the Cloud Run pipelines and the SharedFlow use, so one
+  provisioned environment serves either pattern.
+
+  aiguard_policy_id is optional and normally absent: with no policy id the proxy
+  calls /v1/detection/resolve-and-execute-policy and the API resolves the policy
+  bound to the key.
+-->
+<KeyValueMapOperations continueOnError="false" enabled="true" name="KVM-GetConfig" mapIdentifier="aiguard-config">
+  <DisplayName>KVM-GetConfig</DisplayName>
+  <Properties/>
+  <ExpiryTimeInSecs>300</ExpiryTimeInSecs>
+  <Scope>environment</Scope>
+  <Get assignTo="private.aiguard.apikey">
+    <Key><Parameter>aiguard_api_key</Parameter></Key>
+  </Get>
+  <Get assignTo="private.aiguard.cloud">
+    <Key><Parameter>aiguard_cloud</Parameter></Key>
+  </Get>
+  <Get assignTo="private.aiguard.policyid">
+    <Key><Parameter>aiguard_policy_id</Parameter></Key>
+  </Get>
+  <Get assignTo="private.vertex.project">
+    <Key><Parameter>vertex_project</Parameter></Key>
+  </Get>
+  <Get assignTo="private.vertex.model">
+    <Key><Parameter>vertex_model</Parameter></Key>
+  </Get>
+</KeyValueMapOperations>

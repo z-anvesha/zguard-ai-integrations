@@ -16,7 +16,7 @@ This repo integrates **Zscaler AI Guard** with third-party AI gateways and platf
 - Provide `env.example` files with placeholder values
 
 ### SDK Usage
-- Use `zscaler-sdk-python` (`from zscaler.zaiguard.legacy import LegacyZGuardClientHelper`) wherever Python is available
+- Use `zscaler-sdk-python` (`from zscaler.aiguard.legacy import LegacyZGuardClientHelper`) wherever Python is available
 - Do NOT use raw `httpx` / `requests` / `aiohttp` calls to the AI Guard API — use the SDK
 - Wrap synchronous SDK calls with `asyncio.to_thread()` in async contexts
 - Initialize the SDK client lazily (on first use, not at module import)

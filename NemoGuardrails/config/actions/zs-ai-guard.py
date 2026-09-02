@@ -17,7 +17,7 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from nemoguardrails.actions import action
 
-from zscaler.zaiguard.legacy import LegacyZGuardClientHelper
+from zscaler.aiguard.legacy import LegacyZGuardClientHelper
 
 load_dotenv(override=False)
 
@@ -84,9 +84,20 @@ def _scan_sync(content: str, direction: str, transaction_id: str | None = None):
     return result
 
 
+#: Verdicts that let traffic through. DETECT is AI Guard's monitor-only action:
+#: reported and logged upstream but deliberately not enforced, so blocking on it
+#: would turn a policy the operator set to monitor into an enforcing one.
+ALLOWED_ACTIONS = (PolicyAction.ALLOW, PolicyAction.DETECT)
+
+
 def _is_blocked(result) -> bool:
+    """Fail-closed: anything that is not an explicit ALLOW or DETECT blocks.
+
+    A missing action counts as no verdict, not as permission — that is the shape
+    a soft failure takes (for example a 200 carrying "Policy not found").
+    """
     action_value = str(_get_attr(result, "action", "")).upper()
-    return action_value != PolicyAction.ALLOW
+    return action_value not in ALLOWED_ACTIONS
 
 
 def _get_triggered_detectors(result) -> list[dict[str, Any]]:
@@ -119,8 +130,9 @@ async def call_zs_ai_guard(
     """
     Call Zscaler AI Guard to scan content for policy violations.
 
-    Uses zscaler-sdk-python with fail-closed logic — content is blocked
-    if the API call fails or returns anything other than ALLOW.
+    Uses zscaler-sdk-python with fail-closed logic — content is blocked if the
+    API call fails, or returns anything other than an explicit ALLOW or the
+    monitor-only DETECT.
     """
     if response is not None:
         direction = Direction.OUTBOUND

@@ -26,20 +26,22 @@ def main() -> int:
     log_message(f"PRE-PROMPT: Scanning user prompt ({len(text)} chars)")
 
     if not get_client_config().get("api_key"):
-        log_message("WARNING: AIGUARD_API_KEY not set — allowing prompt without scan")
-        print(json.dumps({"continue": True}))
+        log_message("AIGUARD_API_KEY not set; cannot obtain a verdict — blocking (fail-closed)")
+        print(json.dumps({"continue": False,
+                          "stopReason": "Zscaler AI Guard is not configured "
+                                        "(AIGUARD_API_KEY missing) — blocking."}))
         return 0
 
     r = scan_content(text, "IN")
     if r.get("error"):
-        log_message(f"PRE-PROMPT: API error; failing open: {r['error']}")
-        print(json.dumps({"continue": True}))
+        log_message(f"PRE-PROMPT: API error; blocking (fail-closed): {r['error']}")
+        print(json.dumps({"continue": False, "stopReason": "Zscaler AI Guard: scan did not complete — blocking (fail-closed)"}))
         return 0
 
-    action = r.get("action") or "ALLOW"
+    action = str(r.get("action") or "").upper()
     if action not in ("ALLOW", "BLOCK", "DETECT"):
-        log_message("PRE-PROMPT: Empty or unparseable AI Guard response; failing open")
-        print(json.dumps({"continue": True}))
+        log_message("PRE-PROMPT: Empty or unparseable AI Guard response; blocking (fail-closed)")
+        print(json.dumps({"continue": False, "stopReason": "Zscaler AI Guard: scan did not complete — blocking (fail-closed)"}))
         return 0
 
     if action == "BLOCK":

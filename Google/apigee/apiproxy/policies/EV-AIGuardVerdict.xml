@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ExtractVariables name="EV-AIGuardVerdict">
+  <Source>aiguard.response</Source>
+  <JSONPayload>
+    <Variable name="aiguard.action" type="string">
+      <JSONPath>$.action</JSONPath>
+    </Variable>
+    <Variable name="aiguard.severity" type="string">
+      <JSONPath>$.severity</JSONPath>
+    </Variable>
+    <Variable name="aiguard.transaction.id" type="string">
+      <JSONPath>$.transactionId</JSONPath>
+    </Variable>
+    <Variable name="aiguard.policy.name" type="string">
+      <JSONPath>$.policyName</JSONPath>
+    </Variable>
+    <!-- Soft failures arrive as HTTP 200 carrying an in-body status, e.g.
+         404 "Policy not found". Lifted so a block can name its cause. -->
+    <Variable name="aiguard.body.status" type="string">
+      <JSONPath>$.statusCode</JSONPath>
+    </Variable>
+    <Variable name="aiguard.error.msg" type="string">
+      <JSONPath>$.errorMsg</JSONPath>
+    </Variable>
+  </JSONPayload>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</ExtractVariables>

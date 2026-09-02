@@ -183,7 +183,20 @@ for security threats using the Zscaler AI Guard service.
 								<when condition="@{
                                 var resp = ((IResponse)context.Variables["aiguardScanResponse"]).Body.As<JObject>(preserveContent: true);
                                 var action = resp["action"]?.ToString() ?? "";
-                                return action.Equals("BLOCK", StringComparison.OrdinalIgnoreCase);
+                                // Fail closed. ALLOW passes, and so does DETECT, which is
+                                // AI Guard's monitor-only verdict. An empty action means the
+                                // response carried no verdict at all — the shape a soft
+                                // failure takes, e.g. a 200 with statusCode 404 "Policy not
+                                // found" — and that is not permission. Honour FailOpen there,
+                                // matching how a non-200 from the scanner is handled below.
+                                if (action.Equals("ALLOW", StringComparison.OrdinalIgnoreCase) ||
+                                    action.Equals("DETECT", StringComparison.OrdinalIgnoreCase)) {
+                                    return false;
+                                }
+                                if (string.IsNullOrEmpty(action)) {
+                                    return !Convert.ToBoolean(context.Variables.GetValueOrDefault<object>("FailOpen", false));
+                                }
+                                return true;
                             }">
 									<set-variable name="errorBody" value="@{
                                     var aiguardResponse = ((IResponse)context.Variables["aiguardScanResponse"]).Body.As<JObject>(preserveContent: true);
@@ -200,6 +213,19 @@ for security threats using the Zscaler AI Guard service.
                                     response.Add("severity", aiguardResponse["severity"]?.ToString() ?? "unknown");
                                     response.Add("policyName", aiguardResponse["policyName"]?.ToString() ?? "");
                                     response.Add("transactionId", aiguardResponse["transactionId"]?.ToString() ?? "");
+
+                                    // A soft failure arrives as HTTP 200 with an in-body status
+                                    // and message (e.g. 404 "Policy not found"). Surface them so
+                                    // a no-verdict block names its cause instead of looking like
+                                    // a content decision.
+                                    var inBodyStatus = aiguardResponse["statusCode"]?.ToString() ?? "";
+                                    var inBodyError = aiguardResponse["errorMsg"]?.ToString() ?? "";
+                                    if (!string.IsNullOrEmpty(inBodyStatus)) {
+                                        response.Add("scanStatus", inBodyStatus);
+                                    }
+                                    if (!string.IsNullOrEmpty(inBodyError)) {
+                                        response.Add("scanDetail", inBodyError);
+                                    }
 
                                     var descriptions = context.Variables.GetValueOrDefault<object>("aiguardDescriptions") as JObject;
                                     if (descriptions == null) {   

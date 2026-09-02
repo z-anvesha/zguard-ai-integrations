@@ -24,8 +24,11 @@ local function perform_scan(config, direction, content_to_scan, transaction_id)
     direction = direction,
   }
 
-  if transaction_id and transaction_id ~= "" then
-    payload_table.transaction_id = transaction_id
+  -- The API field is camelCase, and it only accepts a 36-character UUID; any
+  -- other value is answered with a 500. Omitting it lets the API mint its own.
+  if transaction_id and transaction_id:match(
+      "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then
+    payload_table.transactionId = transaction_id
   end
 
   local request_payload_json, json_err = cjson.encode(payload_table)
@@ -83,7 +86,9 @@ local function perform_scan(config, direction, content_to_scan, transaction_id)
     ", severity: " .. tostring(res_body_json.severity or "n/a") ..
     ", direction: " .. direction)
 
-  return action, "Verdict received from AI Guard security scan."
+  -- Normalised to lower case: the API answers in upper case while this plugin's
+  -- internal short-circuits return "block", and the two must be comparable.
+  return string.lower(tostring(action)), "Verdict received from AI Guard security scan."
 end
 
 local function extract_user_prompt(request_body)
@@ -132,7 +137,7 @@ function ZscalerAIGuardHandler:access(config)
 
   local action, reason = perform_scan(config, "IN", prompt, transaction_id)
 
-  if action ~= "allow" then
+  if action ~= "allow" and action ~= "detect" then
     log_error(reason, action)
     return kong.response.exit(403, {
       message = "Request blocked by Zscaler AI Guard security policy.",
@@ -172,7 +177,7 @@ function ZscalerAIGuardHandler:response(config)
 
   local action, reason = perform_scan(config, "OUT", llm_response, transaction_id)
 
-  if action ~= "allow" then
+  if action ~= "allow" and action ~= "detect" then
     log_error(reason, action)
     return kong.response.exit(403, {
       message = "Response blocked by Zscaler AI Guard security policy.",

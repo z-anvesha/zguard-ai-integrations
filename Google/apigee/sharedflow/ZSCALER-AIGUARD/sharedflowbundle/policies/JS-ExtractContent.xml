@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Phase 3: extract the text to scan from the caller's body, across dialects and inline tool calls. -->
+<Javascript name="JS-ExtractContent" timeLimit="5000">
+  <DisplayName>JS-ExtractContent</DisplayName>
+  <IncludeURL>jsc://aiguard-lib.js</IncludeURL>
+  <ResourceURL>jsc://extract-content.js</ResourceURL>
+</Javascript>

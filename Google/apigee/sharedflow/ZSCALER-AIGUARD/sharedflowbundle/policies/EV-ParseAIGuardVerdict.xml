@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Parses the detection response into canonical aiguard.* flow variables so
+  advanced users can write their own conditions on them. JS-ProcessVerdict
+  consumes these rather than re-parsing the body.
+
+  statusCode and errorMsg matter: the API answers HTTP 200 with an in-body
+  statusCode for soft failures such as 404 "Policy not found", and a response
+  with no action is not permission.
+
+  Detector names are collected by JS-ParseDetectors, because detectorResponses
+  is a map keyed by detector name and JSONPath cannot enumerate its keys.
+-->
+<ExtractVariables continueOnError="true" enabled="true" name="EV-ParseAIGuardVerdict">
+  <DisplayName>EV-ParseAIGuardVerdict</DisplayName>
+  <Properties/>
+  <Source>aiguardScanResponse</Source>
+  <JSONPayload>
+    <Variable name="aiguard.action"><JSONPath>$.action</JSONPath></Variable>
+    <Variable name="aiguard.severity"><JSONPath>$.severity</JSONPath></Variable>
+    <Variable name="aiguard.policyName"><JSONPath>$.policyName</JSONPath></Variable>
+    <Variable name="aiguard.policyId"><JSONPath>$.policyId</JSONPath></Variable>
+    <Variable name="aiguard.transactionId"><JSONPath>$.transactionId</JSONPath></Variable>
+    <Variable name="aiguard.direction"><JSONPath>$.direction</JSONPath></Variable>
+    <Variable name="aiguard.statusCode"><JSONPath>$.statusCode</JSONPath></Variable>
+    <Variable name="aiguard.errorMsg"><JSONPath>$.errorMsg</JSONPath></Variable>
+    <Variable name="aiguard.detectorErrorCount"><JSONPath>$.detectorErrorCount</JSONPath></Variable>
+  </JSONPayload>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</ExtractVariables>

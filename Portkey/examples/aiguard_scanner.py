@@ -8,7 +8,7 @@ used by all test_*.py scripts.
 import json
 import os
 
-from zscaler.zaiguard.legacy import LegacyZGuardClientHelper
+from zscaler.aiguard.legacy import LegacyZGuardClientHelper
 
 
 def _get_attr(obj, name, default=None):
@@ -79,9 +79,16 @@ def print_scan_result(result: dict) -> None:
         print(f"  ERROR: {result['error']}")
         return
 
-    action = result["action"]
-    blocked = str(action).upper() != "ALLOW"
-    status = "BLOCKED" if blocked else "ALLOWED"
+    action = str(result["action"] or "").upper()
+    # DETECT is AI Guard's monitor-only verdict: reported, not enforced.
+    # Anything that is not an explicit ALLOW or DETECT is a block, which
+    # includes a response that carried no action at all.
+    if action == "ALLOW":
+        status = "ALLOWED"
+    elif action == "DETECT":
+        status = "DETECT (monitor-only, allowed)"
+    else:
+        status = "BLOCKED"
 
     print(f"  Status:      {status}")
     print(f"  Action:      {action}")

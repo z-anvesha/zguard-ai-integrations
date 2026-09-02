@@ -12,6 +12,15 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/aiguard/scan_file_read.py"
+          }
+        ]
+      },
+      {
         "matcher": "WebFetch|WebSearch|web_search",
         "hooks": [
           {

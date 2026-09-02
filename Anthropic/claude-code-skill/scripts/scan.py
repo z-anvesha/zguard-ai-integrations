@@ -34,7 +34,7 @@ import sys
 from typing import Optional
 
 try:
-    from zscaler.oneapi_client import LegacyZGuardClient
+    from zscaler.oneapi_client import LegacyAIGuardClient
 except ImportError:
     print(json.dumps({
         "status": "error",
@@ -59,15 +59,18 @@ def get_config() -> dict:
         "api_key": api_key,
         "cloud": os.environ.get("AIGUARD_CLOUD", "us1"),
         "timeout": int(os.environ.get("AIGUARD_TIMEOUT", "30")),
-        "auto_retry_on_rate_limit": True,
-        "max_rate_limit_retries": 3,
     }
 
 
 def get_policy_id() -> Optional[int]:
     """Get policy ID from environment."""
-    policy_id = os.environ.get("AIGUARD_POLICY_ID")
-    return int(policy_id) if policy_id else None
+    raw = os.environ.get("AIGUARD_POLICY_ID", "").strip().strip('"').strip("'")
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 def read_file(file_path: str) -> str:
@@ -115,16 +118,16 @@ def scan_content(config: dict, content: str, direction: str, policy_id: Optional
         Scan result dictionary
     """
     try:
-        with LegacyZGuardClient(config) as client:
+        with LegacyAIGuardClient(config) as client:
             if policy_id:
                 api_result, response, error = (
-                    client.zguard.policy_detection.execute_policy(
+                    client.aiguard.policy_detection.execute_policy(
                         content=content, direction=direction, policy_id=policy_id
                     )
                 )
             else:
                 api_result, response, error = (
-                    client.zguard.policy_detection.resolve_and_execute_policy(
+                    client.aiguard.policy_detection.resolve_and_execute_policy(
                         content=content, direction=direction
                     )
                 )
@@ -136,7 +139,15 @@ def scan_content(config: dict, content: str, direction: str, policy_id: Optional
                     "action": "BLOCK"
                 }
 
-            action = api_result.action or "ALLOW"
+            # A 200 with a null action is a soft failure (e.g. statusCode 404
+            # "Policy not found"). Defaulting it to ALLOW would silently disable
+            # scanning, so fail closed instead.
+            action = str(api_result.action or "").upper()
+            if not action:
+                detail = getattr(api_result, "error_msg", None) or \
+                    ("statusCode=%s" % getattr(api_result, "status_code", None))
+                return {"status": "error", "action": "BLOCK",
+                        "error": "scan returned no action verdict (%s)" % detail}
             triggered = get_triggered_detectors(api_result.detector_responses)
 
             result = {
@@ -228,9 +239,17 @@ def main():
         result_prompt = scan_content(config, args.prompt, "IN", policy_id)
         result_response = scan_content(config, args.response, "OUT", policy_id)
 
-        combined_action = "BLOCK" if "BLOCK" in (result_prompt["action"], result_response["action"]) \
-            else "DETECT" if "DETECT" in (result_prompt["action"], result_response["action"]) \
-            else "ALLOW"
+        # Fail closed when combining the two legs: anything that is not an
+        # explicit ALLOW or the monitor-only DETECT is a block, which covers an
+        # unrecognised verdict and the "action": "BLOCK" the error paths above
+        # return. The strictest of the two legs wins.
+        _actions = (result_prompt.get("action"), result_response.get("action"))
+        if any(a not in ("ALLOW", "DETECT") for a in _actions):
+            combined_action = "BLOCK"
+        elif "DETECT" in _actions:
+            combined_action = "DETECT"
+        else:
+            combined_action = "ALLOW"
 
         result = {
             "action": combined_action,

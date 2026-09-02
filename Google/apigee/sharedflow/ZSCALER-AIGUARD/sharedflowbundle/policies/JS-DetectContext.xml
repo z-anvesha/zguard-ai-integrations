@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Phase 2: classify the API dialect, decide whether this turn should be scanned, and derive identifiers. -->
+<Javascript name="JS-DetectContext" timeLimit="5000">
+  <DisplayName>JS-DetectContext</DisplayName>
+  <IncludeURL>jsc://aiguard-lib.js</IncludeURL>
+  <ResourceURL>jsc://detect-context.js</ResourceURL>
+</Javascript>

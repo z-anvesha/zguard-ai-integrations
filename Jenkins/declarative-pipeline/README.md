@@ -1,6 +1,6 @@
 # Jenkins — Zscaler AI Guard Policy Validation
 
-This integration adds **Zscaler AI Guard** policy validation to a Jenkins Declarative Pipeline. When monitored files change, the pipeline runs `scripts/scan_policy.py` against `config/test-prompts.yaml` using `zscaler-sdk-python` (`LegacyZGuardClient`) — the same API as the [GitHub Actions](../../github-actions/) integration (`resolve-and-execute-policy` / optional `execute-policy`).
+This integration adds **Zscaler AI Guard** policy validation to a Jenkins Declarative Pipeline. When monitored files change, the pipeline runs `scripts/scan_policy.py` against `config/test-prompts.yaml` using `zscaler-sdk-python` (`LegacyAIGuardClient`) — the same API as the [GitHub Actions](../../github-actions/) integration (`resolve-and-execute-policy` / optional `execute-policy`).
 
 The included **Deploy Model to Vertex AI** and **Test Model Endpoint** stages are optional examples (same pattern as before); use **SKIP_DEPLOY** or run only on branches without `main` if you do not use GCP.
 
@@ -87,6 +87,34 @@ export AIGUARD_CLOUD=us1   # optional
 python scripts/scan_policy.py --config config/test-prompts.yaml
 ```
 
+The scan stage needs no GCP access at all — it only calls the AI Guard API.
+
+### Model deploy and teardown
+
+The deploy and undeploy scripts drive `gcloud` (Model Garden's EULA acceptance
+and Hugging Face token flags have no `google-cloud-aiplatform` equivalent), so
+they need an authenticated `gcloud` rather than the AI Guard key. Both accept
+`--dry-run`, which prints the exact commands without creating or deleting
+anything:
+
+```bash
+export GCP_PROJECT_ID="your-project"
+export GCP_REGION="us-central1"        # optional; defaults to deployment.region
+python scripts/deploy_model.py --dry-run
+```
+
+> ⚠️ **A real deploy starts GPU-backed infrastructure and bills for it until you
+> tear it down.** The pipeline never undeploys, so nothing stops the meter on its
+> own:
+>
+> ```bash
+> python scripts/undeploy_model.py
+> ```
+>
+> It matches the endpoint display name **exactly**, exits 0 when there is nothing
+> to remove, and undeploys every model before deleting the endpoint — Vertex
+> refuses to delete an endpoint that still has one attached.
+
 ---
 
 ## Repository layout
@@ -99,9 +127,10 @@ declarative-pipeline/
 │   └── test-prompts.yaml    # AI Guard policy test cases
 ├── scripts/
 │   ├── scan_policy.py        # AI Guard validation (zscaler-sdk-python)
-│   ├── deploy_model.sh
+│   ├── deploy_model.py       # deploy from Model Garden (--dry-run supported)
 │   ├── test_model.py
-│   └── undeploy_model.sh
+│   ├── undeploy_model.py     # tear down the endpoint to stop GPU costs
+│   └── vertex_common.py      # shared gcloud helpers
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -129,4 +158,4 @@ Point your Jenkins job **workspace root** at `declarative-pipeline` (or the repo
 - [zscaler-sdk-python](https://github.com/zscaler/zscaler-sdk-python)
 - [Jenkins Pipeline](https://www.jenkins.io/doc/book/pipeline/)
 
-Design lineage: adapted from Palo Alto Prisma AIRS Jenkins sample; scanner and tests aligned with this repo’s GitHub Actions integration.
+The scanner and tests are aligned with this repo's GitHub Actions integration.

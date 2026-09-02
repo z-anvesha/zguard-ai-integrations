@@ -45,7 +45,7 @@ def main() -> int:
         respond_json(True, f"Zscaler AI Guard scan failed: {r['error']}")
         return 0
 
-    action = r.get("action") or "ALLOW"
+    action = str(r.get("action") or "").upper()
     if action not in ("ALLOW", "BLOCK", "DETECT"):
         log_message("UserPromptSubmit: invalid action (fail-closed)")
         respond_json(

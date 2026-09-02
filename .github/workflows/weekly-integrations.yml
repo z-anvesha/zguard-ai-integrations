@@ -51,6 +51,15 @@ jobs:
       - name: Syntax — Jenkins
         run: make compile-jenkins
 
+      - name: Syntax — OpenAI Codex
+        run: make compile-openai
+
+      - name: Syntax — AWS
+        run: make compile-aws
+
+      - name: Syntax — Google
+        run: make compile-google
+
   ai-guard-policy-scan:
     name: AI Guard policy validation
     needs: python-compile

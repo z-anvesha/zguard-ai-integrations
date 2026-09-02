@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Phase 4: assemble the detection request body (content, direction, optional transactionId and policyId). -->
+<Javascript name="JS-BuildAIGuardScanBody" timeLimit="5000">
+  <DisplayName>JS-BuildAIGuardScanBody</DisplayName>
+  <IncludeURL>jsc://aiguard-lib.js</IncludeURL>
+  <ResourceURL>jsc://build-aiguard-scan-body.js</ResourceURL>
+</Javascript>

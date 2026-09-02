@@ -1,0 +1,5 @@
+# Zscaler AI Guard — Codex CLI hooks
+#
+# 1.9.44 is the floor: earlier releases never attached the Bearer token to AI Guard
+# policy-detection calls, so every scan failed with a 401.
+zscaler-sdk-python>=1.9.44

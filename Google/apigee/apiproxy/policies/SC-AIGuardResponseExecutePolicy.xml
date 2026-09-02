@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Response-leg counterpart of SC-AIGuardExecutePolicy. -->
+<ServiceCallout name="SC-AIGuardResponseExecutePolicy">
+  <Request variable="aiguardRespscanRequest"/>
+  <Response>aiguardRespscanResult</Response>
+  <Timeout>6000</Timeout>
+  <HTTPTargetConnection>
+    <URL>https://api.{aiguard.cloud}.zseclipse.net/v1/detection/execute-policy</URL>
+  </HTTPTargetConnection>
+</ServiceCallout>

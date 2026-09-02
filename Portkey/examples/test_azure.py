@@ -74,7 +74,7 @@ def main():
         print("\nScan error — aborting.")
         return
 
-    if str(pre_result.get("action", "")).upper() != "ALLOW":
+    if str(pre_result.get("action") or "").upper() not in ("ALLOW", "DETECT"):
         print(f"\nPrompt BLOCKED by AI Guard — not sending to LLM.")
         return
 
@@ -92,7 +92,7 @@ def main():
     post_result = scan_content(response_text, "OUT", txn_id)
     print_scan_result(post_result)
 
-    if str(post_result.get("action", "")).upper() != "ALLOW":
+    if str(post_result.get("action") or "").upper() not in ("ALLOW", "DETECT"):
         print(f"\nResponse BLOCKED by AI Guard — not returning to user.")
         return
 

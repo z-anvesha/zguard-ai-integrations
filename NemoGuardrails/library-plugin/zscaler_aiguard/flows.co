@@ -1,0 +1,28 @@
+"""
+Zscaler AI Guard moderation flows (Colang 2.0).
+
+Detectors: toxicity, pii, personalData, piiDeepscan, secrets, prompt injection, and more.
+The AI Guard policy engine evaluates all detectors and returns a single ALLOW / BLOCK verdict.
+"""
+
+flow zscaler aiguard moderation on input
+  """Scan user prompts through Zscaler AI Guard before they reach the LLM."""
+  $result = await CallZscalerAiguardApiAction(text=$user_message, direction="IN")
+
+  if $result.action == "BLOCK"
+    if $system.config.enable_rails_exceptions
+      send ZscalerAiguardInputRailException(message="Zscaler AI Guard blocked the user prompt. Severity: {$result.severity}. Policy: {$result.policy_name}.")
+    else
+      bot refuse to respond
+    abort
+
+flow zscaler aiguard moderation on output
+  """Scan LLM responses through Zscaler AI Guard before they reach the user."""
+  $result = await CallZscalerAiguardApiAction(text=$bot_message, direction="OUT")
+
+  if $result.action == "BLOCK"
+    if $system.config.enable_rails_exceptions
+      send ZscalerAiguardOutputRailException(message="Zscaler AI Guard blocked the LLM response. Severity: {$result.severity}. Policy: {$result.policy_name}.")
+    else
+      bot refuse to respond
+    abort
