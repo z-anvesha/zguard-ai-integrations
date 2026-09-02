@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SharedFlowBundle revision="1" name="ZSCALER-AIGUARD">
+    <DisplayName>ZSCALER-AIGUARD</DisplayName>
+    <Description>Zscaler AI Guard unified security-scanning SharedFlow for Apigee X. Multi-format (OpenAI chat + Responses, Anthropic, Gemini/Vertex, MCP), prompt/response/both, streaming-aware, with inline tool-call scanning. Included from any proxy's request and response flows.</Description>
+    <SharedFlows>
+        <SharedFlow>default</SharedFlow>
+    </SharedFlows>
+    <subType>SharedFlow</subType>
+</SharedFlowBundle>

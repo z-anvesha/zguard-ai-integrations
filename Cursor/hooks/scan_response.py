@@ -65,16 +65,23 @@ def main() -> int:
 
     r = scan_content(truncated, "IN")
     if r.get("error"):
-        log_message(f"SCAN-RESPONSE: WARNING: API error, allowing by default: {r['error']}")
-        print("{}")
+        # Fail closed: this hook is the one that sees indirect injection
+        # arriving in MCP tool output, and blocking here is non-destructive
+        # (the tool output is replaced with a notice, nothing is aborted).
+        log_message(f"SCAN-RESPONSE: scan did not complete; blocking (fail-closed): {r['error']}")
+        print(json.dumps({"updated_mcp_tool_output":
+                          "BLOCKED by Zscaler AI Guard: scan did not complete "
+                          "— tool output withheld (fail-closed)."}))
         return 0
 
-    action = r.get("action") or "ALLOW"
+    action = str(r.get("action") or "").upper()
     if action not in ("ALLOW", "BLOCK", "DETECT"):
         log_message(
-            f"SCAN-RESPONSE: WARNING: AI Guard returned invalid/no action, allowing by default"
+            "SCAN-RESPONSE: no recognised verdict; blocking (fail-closed)"
         )
-        print("{}")
+        print(json.dumps({"updated_mcp_tool_output":
+                          "BLOCKED by Zscaler AI Guard: scan returned no verdict "
+                          "— tool output withheld (fail-closed)."}))
         return 0
 
     txn = r.get("transaction_id") or "unknown"

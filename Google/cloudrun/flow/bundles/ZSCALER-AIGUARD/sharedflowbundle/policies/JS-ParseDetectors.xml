@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Flattens detectorResponses (a map keyed by detector name, which JSONPath
+     cannot enumerate) into two comma-separated lists of names. -->
+<Javascript name="JS-ParseDetectors" timeLimit="5000">
+  <DisplayName>JS-ParseDetectors</DisplayName>
+  <IncludeURL>jsc://aiguard-lib.js</IncludeURL>
+  <ResourceURL>jsc://parse-detectors.js</ResourceURL>
+</Javascript>

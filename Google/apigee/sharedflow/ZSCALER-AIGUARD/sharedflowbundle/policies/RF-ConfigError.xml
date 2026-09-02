@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Fail-closed configuration guard: the AI Guard API key is absent from KVM
+  `aiguard-config` and failOpen is false. Surface a clear 500 rather than
+  silently failing every scan. In fail-open mode this step is skipped.
+-->
+<RaiseFault continueOnError="false" enabled="true" name="RF-ConfigError">
+  <DisplayName>RF-ConfigError</DisplayName>
+  <Properties/>
+  <FaultResponse>
+    <Set>
+      <Headers>
+        <Header name="Content-Type">application/json</Header>
+        <Header name="x-aiguard-blocked">true</Header>
+      </Headers>
+      <Payload contentType="application/json">{"error":"&#128737; ZSCALER AI GUARD SECURITY ALERT: Configuration error - API key not configured in KVM 'aiguard-config' (key aiguard_api_key)."}</Payload>
+      <StatusCode>500</StatusCode>
+      <ReasonPhrase>Internal Server Error</ReasonPhrase>
+    </Set>
+  </FaultResponse>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</RaiseFault>

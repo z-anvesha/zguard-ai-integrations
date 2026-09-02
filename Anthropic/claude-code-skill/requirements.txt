@@ -1,1 +1,1 @@
-zscaler-sdk-python
+zscaler-sdk-python>=1.9.44

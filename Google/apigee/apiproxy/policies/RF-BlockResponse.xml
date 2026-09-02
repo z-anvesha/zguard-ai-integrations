@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- See RF-Block on the required Set child order. -->
+<RaiseFault name="RF-BlockResponse">
+  <FaultResponse>
+    <Set>
+      <Headers>
+        <Header name="Content-Type">application/json</Header>
+        <Header name="x-aiguard-blocked">true</Header>
+        <Header name="x-aiguard-severity">{aiguard.scan.response.severity}</Header>
+        <Header name="x-aiguard-transaction-id">{aiguard.scan.response.transaction.id}</Header>
+      </Headers>
+      <Payload contentType="application/json">{"error":"ZSCALER AI GUARD: RESPONSE BLOCKED","direction":"OUT","action":"{aiguard.scan.response.action}","severity":"{aiguard.scan.response.severity}","policy":"{aiguard.scan.response.policy.name}","transaction_id":"{aiguard.scan.response.transaction.id}","scan_status":"{aiguard.scan.response.body.status}","scan_detail":"{aiguard.scan.response.error.msg}"}</Payload>
+      <StatusCode>403</StatusCode>
+      <ReasonPhrase>Forbidden</ReasonPhrase>
+    </Set>
+  </FaultResponse>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</RaiseFault>

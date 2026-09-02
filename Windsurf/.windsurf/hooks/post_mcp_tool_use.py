@@ -56,7 +56,7 @@ def main() -> int:
         log_message(f"post_mcp_tool_use: API error (audit only): {r['error']}")
         return EXIT_ALLOW
 
-    action = r.get("action") or "ALLOW"
+    action = str(r.get("action") or "").upper()
     det = r.get("triggered_detectors") or []
     bd = ",".join(r.get("blocking_detectors") or [])
     txn = r.get("transaction_id") or "unknown"

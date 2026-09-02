@@ -137,7 +137,7 @@ pipeline {
                         pip install --quiet -r requirements.txt
 
                         echo "=== Deploying Model ==="
-                        bash scripts/deploy_model.sh
+                        python scripts/deploy_model.py
                     '''
                 }
             }

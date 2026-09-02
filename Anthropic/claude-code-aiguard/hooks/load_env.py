@@ -30,7 +30,7 @@ def load_env():
                 if "=" in line:
                     key, value = line.split("=", 1)
                     key = key.strip()
-                    value = value.strip()
+                    value = value.strip().strip('"').strip("'")
 
                     # Only set if not already in environment
                     if key and value and key not in os.environ:

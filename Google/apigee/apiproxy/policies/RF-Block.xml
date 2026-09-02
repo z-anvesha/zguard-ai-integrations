@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Set's children must appear in schema order: Headers, Payload, StatusCode,
+     ReasonPhrase. Out of order, Apigee discards the FaultResponse and returns
+     its own 500 fault envelope instead. -->
+<RaiseFault name="RF-Block">
+  <FaultResponse>
+    <Set>
+      <Headers>
+        <Header name="Content-Type">application/json</Header>
+        <Header name="x-aiguard-blocked">true</Header>
+        <Header name="x-aiguard-severity">{aiguard.severity}</Header>
+        <Header name="x-aiguard-transaction-id">{aiguard.transaction.id}</Header>
+      </Headers>
+      <Payload contentType="application/json">{"error":"ZSCALER AI GUARD: REQUEST BLOCKED","direction":"IN","action":"{aiguard.action}","severity":"{aiguard.severity}","policy":"{aiguard.policy.name}","transaction_id":"{aiguard.transaction.id}","scan_status":"{aiguard.body.status}","scan_detail":"{aiguard.error.msg}"}</Payload>
+      <StatusCode>403</StatusCode>
+      <ReasonPhrase>Forbidden</ReasonPhrase>
+    </Set>
+  </FaultResponse>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</RaiseFault>

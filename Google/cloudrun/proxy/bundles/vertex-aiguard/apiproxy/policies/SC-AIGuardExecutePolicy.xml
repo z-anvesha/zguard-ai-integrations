@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Used instead of SC-AIGuardScan when a policy id is pinned in the KVM.
+     resolve-and-execute-policy ignores policyId outright; only this endpoint
+     honours it. Both write the same response variable so EV-AIGuardVerdict
+     does not care which one ran. -->
+<ServiceCallout name="SC-AIGuardExecutePolicy">
+  <Request variable="aiguard.request"/>
+  <Response>aiguard.response</Response>
+  <Timeout>5000</Timeout>
+  <HTTPTargetConnection>
+    <URL>https://api.{aiguard.cloud}.zseclipse.net/v1/detection/execute-policy</URL>
+  </HTTPTargetConnection>
+</ServiceCallout>

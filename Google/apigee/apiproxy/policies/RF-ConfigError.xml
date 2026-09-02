@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- See RF-Block on the required Set child order. -->
+<RaiseFault name="RF-ConfigError">
+  <FaultResponse>
+    <Set>
+      <Headers>
+        <Header name="Content-Type">application/json</Header>
+        <Header name="x-aiguard-blocked">true</Header>
+      </Headers>
+      <Payload contentType="application/json">{"error":"ZSCALER AI GUARD: NOT CONFIGURED","detail":"No AI Guard API key in the environment KVM (map 'aiguard-config', key 'aiguard_api_key'). Refusing to proxy traffic that cannot be scanned."}</Payload>
+      <StatusCode>500</StatusCode>
+      <ReasonPhrase>Internal Server Error</ReasonPhrase>
+    </Set>
+  </FaultResponse>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</RaiseFault>

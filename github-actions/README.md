@@ -4,7 +4,7 @@ This integration adds Zscaler AI Guard policy validation to a GitHub Actions CI/
 
 This ensures that policy changes don't accidentally allow dangerous content or block legitimate traffic, gating deployment on passing security validation. The example uses Google Cloud Vertex AI as the deployment target, but the security scanning pattern works with any infrastructure.
 
-> **Note:** This integration validates **AI Guard runtime security policies** (prompt/response scanning) — the same `resolve-and-execute-policy` API used by all other integrations in this repository. It uses `zscaler-sdk-python` (`LegacyZGuardClient`).
+> **Note:** This integration validates **AI Guard runtime security policies** (prompt/response scanning) — the same `resolve-and-execute-policy` API used by all other integrations in this repository. It uses `zscaler-sdk-python` (`LegacyAIGuardClient`).
 
 ---
 

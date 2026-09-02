@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ProxyEndpoint name="default">
+  <HTTPProxyConnection>
+    <BasePath>/vertex</BasePath>
+  </HTTPProxyConnection>
+
+  <PreFlow name="PreFlow">
+    <Request>
+      <!-- Step 1: Get configuration from KVM -->
+      <Step><Name>KVM-GetConfig</Name></Step>
+
+      <!-- Step 2: Refuse to run unscanned if there is no API key to scan with -->
+      <Step>
+        <Name>RF-ConfigError</Name>
+        <Condition>(private.aiguard.apikey is null) or (private.aiguard.apikey = "")</Condition>
+      </Step>
+
+      <!-- Step 3: Extract prompt from request -->
+      <Step><Name>JS-ScanPrompt</Name></Step>
+
+      <!-- Step 4: Build AI Guard API request -->
+      <Step>
+        <Name>AM-AIGuardRequest</Name>
+        <Condition>(aiguard.prompt.present = "true")</Condition>
+      </Step>
+
+      <!-- Step 5: Call AI Guard (direction=IN). Auto-resolve unless a policy id
+           is pinned; resolve-and-execute-policy ignores policyId outright. -->
+      <Step>
+        <Name>SC-AIGuardScan</Name>
+        <Condition>(aiguard.prompt.present = "true") and (aiguard.policy.id = "")</Condition>
+      </Step>
+      <Step>
+        <Name>SC-AIGuardExecutePolicy</Name>
+        <Condition>(aiguard.prompt.present = "true") and (aiguard.policy.id != "")</Condition>
+      </Step>
+
+      <!-- Step 6: Extract verdict from AI Guard response -->
+      <Step>
+        <Name>EV-AIGuardVerdict</Name>
+        <Condition>(aiguard.prompt.present = "true")</Condition>
+      </Step>
+
+      <!-- Step 7: Fail closed. Anything that is not an explicit ALLOW or the
+           monitor-only DETECT is a block, including a non-200 from the scan
+           and a 200 that carried no action at all. -->
+      <Step>
+        <Name>RF-Block</Name>
+        <Condition>(aiguard.prompt.present = "true") and ((aiguard.response.status.code != 200) or ((aiguard.action != "ALLOW") and (aiguard.action != "DETECT")))</Condition>
+      </Step>
+    </Request>
+  </PreFlow>
+
+  <PostFlow name="PostFlow">
+    <Response>
+      <!-- Step 8: Extract response text from Vertex AI -->
+      <Step>
+        <Name>JS-ScanResponse</Name>
+        <Condition>(response.status.code >= 200) and (response.status.code &lt; 300)</Condition>
+      </Step>
+
+      <!-- Step 9: Build AI Guard response scan request -->
+      <Step>
+        <Name>AM-AIGuardResponseRequest</Name>
+        <Condition>(aiguard.response.present = "true")</Condition>
+      </Step>
+
+      <!-- Step 10: Call AI Guard (direction=OUT), same endpoint choice as step 5 -->
+      <Step>
+        <Name>SC-AIGuardResponseScan</Name>
+        <Condition>(aiguard.response.present = "true") and (aiguard.policy.id = "")</Condition>
+      </Step>
+      <Step>
+        <Name>SC-AIGuardResponseExecutePolicy</Name>
+        <Condition>(aiguard.response.present = "true") and (aiguard.policy.id != "")</Condition>
+      </Step>
+
+      <!-- Step 11: Extract response verdict -->
+      <Step>
+        <Name>EV-AIGuardResponseVerdict</Name>
+        <Condition>(aiguard.response.present = "true")</Condition>
+      </Step>
+
+      <!-- Step 12: Fail closed on the response leg, same rule as step 7 -->
+      <Step>
+        <Name>RF-BlockResponse</Name>
+        <Condition>(aiguard.response.present = "true") and ((aiguardRespscanResult.status.code != 200) or ((aiguard.scan.response.action != "ALLOW") and (aiguard.scan.response.action != "DETECT")))</Condition>
+      </Step>
+    </Response>
+  </PostFlow>
+
+  <RouteRule name="default">
+    <TargetEndpoint>vertex-target</TargetEndpoint>
+  </RouteRule>
+</ProxyEndpoint>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Phase 6: decide the outcome and build a block response in the caller's native dialect. -->
+<Javascript name="JS-ProcessVerdict" timeLimit="5000">
+  <DisplayName>JS-ProcessVerdict</DisplayName>
+  <IncludeURL>jsc://aiguard-lib.js</IncludeURL>
+  <ResourceURL>jsc://process-verdict.js</ResourceURL>
+</Javascript>

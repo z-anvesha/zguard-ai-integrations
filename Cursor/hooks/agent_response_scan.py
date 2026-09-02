@@ -36,12 +36,12 @@ def main() -> int:
 
     r = scan_content(truncated, "OUT")
     if r.get("error"):
-        log_message(f"AGENT-RESPONSE: API error; failing open: {r['error']}")
+        log_message(f"AGENT-RESPONSE: API error; no verdict obtained: {r['error']}")
         return 0
 
-    action = r.get("action") or "ALLOW"
+    action = str(r.get("action") or "").upper()
     if action not in ("ALLOW", "BLOCK", "DETECT"):
-        log_message("AGENT-RESPONSE: Empty or unparseable AI Guard response; failing open")
+        log_message("AGENT-RESPONSE: Empty or unparseable AI Guard response; no verdict obtained")
         return 0
 
     if action == "BLOCK":

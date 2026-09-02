@@ -56,7 +56,7 @@ def main() -> int:
         print(f"Zscaler AI Guard scan failed: {r['error']}", file=sys.stderr)
         return EXIT_BLOCK
 
-    action = r.get("action") or "ALLOW"
+    action = str(r.get("action") or "").upper()
     if action not in ("ALLOW", "BLOCK", "DETECT"):
         log_message("pre_run_command: invalid action (fail-closed)")
         print(

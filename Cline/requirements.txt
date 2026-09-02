@@ -1,2 +1,2 @@
-zscaler-sdk-python
+zscaler-sdk-python>=1.9.44
 python-dotenv>=1.0.0

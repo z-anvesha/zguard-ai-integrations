@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Returns the block (or fail-closed) response built by JS-ProcessVerdict in the
+  caller's native dialect. Status, Content-Type, reason and body all come from
+  variables, so one policy serves Vertex/Gemini, OpenAI (chat + Responses),
+  Anthropic, MCP JSON-RPC, and the graceful SSE refusal for streaming callers.
+
+  The x-aiguard-* headers make a block detectable even when the body is a native
+  200-shaped envelope; x-aiguard-transaction-id is the id to look up in the AI
+  Guard Console.
+-->
+<RaiseFault continueOnError="false" enabled="true" name="RF-Block">
+  <DisplayName>RF-Block</DisplayName>
+  <Properties/>
+  <FaultResponse>
+    <Set>
+      <Headers>
+        <Header name="Content-Type">{aiguard.block.ctype}</Header>
+        <Header name="x-aiguard-blocked">true</Header>
+        <Header name="x-aiguard-category">{aiguard.block.category}</Header>
+        <Header name="x-aiguard-severity">{aiguard.severity}</Header>
+        <Header name="x-aiguard-transaction-id">{aiguard.transactionId}</Header>
+      </Headers>
+      <Payload>{aiguard.block.body}</Payload>
+      <StatusCode>{aiguard.block.status}</StatusCode>
+      <ReasonPhrase>{aiguard.block.reason}</ReasonPhrase>
+    </Set>
+  </FaultResponse>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</RaiseFault>

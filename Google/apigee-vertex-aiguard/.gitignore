@@ -1,9 +1,0 @@
-# Environment files
-.env
-
-# Service account keys
-*.json
-!example.json
-
-# Logs
-*.log

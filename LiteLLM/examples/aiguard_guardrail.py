@@ -22,7 +22,7 @@ from fastapi import HTTPException
 from litellm.integrations.custom_logger import CustomLogger
 from litellm._logging import verbose_proxy_logger
 
-from zscaler.zaiguard.legacy import LegacyZGuardClientHelper
+from zscaler.aiguard.legacy import LegacyZGuardClientHelper
 
 
 class ZscalerAIGuardCallback(CustomLogger):
@@ -81,6 +81,20 @@ class ZscalerAIGuardCallback(CustomLogger):
             return obj.get(name, default)
         return getattr(obj, name, default)
 
+    #: Verdicts that let traffic through. DETECT is AI Guard's monitor-only
+    #: action: reported and logged upstream, deliberately not enforced.
+    ALLOWED_ACTIONS = ("ALLOW", "DETECT")
+
+    def _is_blocked(self, result) -> bool:
+        """Fail-closed: block on anything that is not an explicit ALLOW/DETECT.
+
+        A missing action is not permission. The API reports soft failures — most
+        commonly `404 "Policy not found"` — inside an HTTP 200 carrying no
+        action, so treating a falsy action as allowed silently disables scanning.
+        """
+        action = self._get_attr(result, "action")
+        return str(action or "").upper() not in self.ALLOWED_ACTIONS
+
     def _build_block_message(self, result) -> str:
         """Build a detailed block message from the AI Guard response."""
         action = self._get_attr(result, "action", "BLOCK")
@@ -138,7 +152,7 @@ class ZscalerAIGuardCallback(CustomLogger):
             "AI Guard verdict: action=%s, txn=%s", action, transaction_id
         )
 
-        if action and str(action).upper() != "ALLOW":
+        if self._is_blocked(result):
             msg = self._build_block_message(result)
             verbose_proxy_logger.warning("AI Guard BLOCKED (input): %s", msg)
             raise HTTPException(status_code=403, detail=msg)
@@ -163,7 +177,7 @@ class ZscalerAIGuardCallback(CustomLogger):
             "AI Guard verdict: action=%s, txn=%s", action, transaction_id
         )
 
-        if action and str(action).upper() != "ALLOW":
+        if self._is_blocked(result):
             msg = self._build_block_message(result)
             verbose_proxy_logger.warning("AI Guard BLOCKED (output): %s", msg)
             raise HTTPException(status_code=403, detail=msg)

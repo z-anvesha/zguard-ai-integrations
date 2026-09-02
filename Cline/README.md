@@ -48,7 +48,7 @@ User Prompt ──► UserPromptSubmit ──► Model ──► PreToolUse ─�
    AIGUARD_API_KEY=your-api-key
    AIGUARD_CLOUD=us1
    # Optional:
-   # AIGUARD_POLICY_ID=12345
+   # # AIGUARD_POLICY_ID=<id>
    ```
 
 3. **Make hooks executable** (Unix/macOS):

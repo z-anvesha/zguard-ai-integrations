@@ -38,7 +38,7 @@ def load_env():
                 if "=" in line:
                     key, value = line.split("=", 1)
                     key = key.strip()
-                    value = value.strip()
+                    value = value.strip().strip('"').strip("'")
                     # Only set if not already in environment
                     if key and value and key not in os.environ:
                         os.environ[key] = value
@@ -49,7 +49,7 @@ def load_env():
 # Load .env file at import time
 load_env()
 
-from zscaler.oneapi_client import LegacyZGuardClient
+from zscaler.oneapi_client import LegacyAIGuardClient
 
 
 def get_log_file() -> Path:
@@ -57,7 +57,7 @@ def get_log_file() -> Path:
     log_path = os.environ.get(
         "SECURITY_LOG_PATH", os.path.expanduser("~/.claude/hooks/aiguard/security.log")
     )
-    log_file = Path(log_path)
+    log_file = Path(os.path.expanduser(log_path))
     log_file.parent.mkdir(parents=True, exist_ok=True)
     return log_file
 
@@ -76,16 +76,19 @@ def get_client_config() -> dict:
         "api_key": os.environ.get("AIGUARD_API_KEY"),
         "cloud": os.environ.get("AIGUARD_CLOUD", "us1"),
         "timeout": int(os.environ.get("AIGUARD_TIMEOUT", "30")),
-        "auto_retry_on_rate_limit": True,
-        "max_rate_limit_retries": 3,
     }
     return config
 
 
 def get_policy_id():
     """Get policy ID from environment variables."""
-    policy_id = os.environ.get("AIGUARD_POLICY_ID")
-    return int(policy_id) if policy_id else None
+    raw = os.environ.get("AIGUARD_POLICY_ID", "").strip().strip('"').strip("'")
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
 
 
 def get_triggered_detectors(detector_responses: dict) -> list:
@@ -112,28 +115,34 @@ def scan_user_input(content: str, policy_id: int = None) -> tuple:
     config = get_client_config()
 
     if not config["api_key"]:
-        log_message("ERROR: AIGUARD_API_KEY environment variable not set")
-        return False, None, {}  # Fail-open for misconfiguration
+        log_message("ERROR: AIGUARD_API_KEY not set - blocking (fail-closed)")
+        return True, ("Zscaler AI Guard is not configured (AIGUARD_API_KEY is "
+                      "not set), so your prompt could not be scanned."), {}
 
     try:
-        with LegacyZGuardClient(config) as client:
+        with LegacyAIGuardClient(config) as client:
             if policy_id:
-                result, response, error = client.zguard.policy_detection.execute_policy(
+                result, response, error = client.aiguard.policy_detection.execute_policy(
                     content=content, direction="IN", policy_id=policy_id
                 )
             else:
                 result, response, error = (
-                    client.zguard.policy_detection.resolve_and_execute_policy(
+                    client.aiguard.policy_detection.resolve_and_execute_policy(
                         content=content, direction="IN"
                     )
                 )
 
             if error:
-                log_message(f"ERROR: AI Guard API error: {error}")
-                return False, None, {}  # Fail-open on API errors
+                log_message(f"ERROR: AI Guard API error: {error} - blocking (fail-closed)")
+                return True, ("Zscaler AI Guard could not scan your prompt "
+                              f"(API error: {error})."), {}
 
             # Extract response details
-            action = result.action or "ALLOW"
+            # Fail closed on a null action: a 200 carrying statusCode 404
+            # ("Policy not found") would otherwise read as ALLOW.
+            action = str(result.action or "").upper()
+            if not action:
+                action = "BLOCK"
             severity = result.severity or "NONE"
             transaction_id = result.transaction_id or "unknown"
             # Use policy_id if provided, otherwise check if API returned policy name
@@ -189,8 +198,9 @@ def scan_user_input(content: str, policy_id: int = None) -> tuple:
                 return False, None, details
 
     except Exception as e:
-        log_message(f"ERROR: Exception during scan: {str(e)}")
-        return False, None, {}  # Fail-open on exceptions
+        log_message(f"ERROR: Exception during scan: {str(e)} - blocking (fail-closed)")
+        return True, ("Zscaler AI Guard could not scan your prompt "
+                      f"({type(e).__name__}: {e})."), {}
 
 
 def main():

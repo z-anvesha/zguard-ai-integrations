@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  FlowCallout into ZSCALER-AIGUARD with type=user-prompt.
+  Used in the request path to scan the user prompt before invoking Vertex.
+-->
+<FlowCallout continueOnError="false" enabled="true" name="FC-CallAIGuardInput">
+  <DisplayName>FC-CallAIGuardInput</DisplayName>
+  <FaultRules/>
+  <Parameters>
+    <Parameter name="type">user-prompt</Parameter>
+  </Parameters>
+  <SharedFlowBundle>ZSCALER-AIGUARD</SharedFlowBundle>
+</FlowCallout>

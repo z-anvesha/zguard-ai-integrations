@@ -38,23 +38,26 @@ def main() -> int:
 
     if not get_client_config().get("api_key"):
         log_message(
-            f"PRE-MCP: WARNING — AIGUARD_API_KEY not set; skipping scan for tool={tool_name} (fail-open)"
+            f"PRE-MCP: AIGUARD_API_KEY not set; cannot obtain a verdict for tool={tool_name} "
+            "— blocking (fail-closed)"
         )
-        print(json.dumps({"permission": "allow"}))
+        print(json.dumps({"permission": "deny",
+                          "userMessage": "Zscaler AI Guard is not configured "
+                                         "(AIGUARD_API_KEY missing) — blocking."}))
         return 0
 
     log_message(f"PRE-MCP: Scanning tool={tool_name}")
 
     r = scan_content(tool_input_str, "IN")
     if r.get("error"):
-        log_message(f"PRE-MCP: API error scanning tool={tool_name}; failing open: {r['error']}")
-        print(json.dumps({"permission": "allow"}))
+        log_message(f"PRE-MCP: API error scanning tool={tool_name}; blocking (fail-closed): {r['error']}")
+        print(json.dumps({"permission": "deny", "userMessage": "Zscaler AI Guard: scan did not complete — blocking (fail-closed)"}))
         return 0
 
-    action = r.get("action") or "ALLOW"
+    action = str(r.get("action") or "").upper()
     if action not in ("ALLOW", "BLOCK", "DETECT"):
         log_message(
-            f"PRE-MCP: Empty or unparseable AI Guard response for tool={tool_name}; failing open"
+            f"PRE-MCP: Empty or unparseable AI Guard response for tool={tool_name}; blocking (fail-closed)"
         )
         print(json.dumps({"permission": "allow"}))
         return 0

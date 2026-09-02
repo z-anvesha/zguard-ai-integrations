@@ -278,15 +278,25 @@ Common issues:
 
 ## Security Considerations
 
-### Fail-Open Behavior
+### Fail-Closed Behavior
 
-The hook is designed to **fail-open** on errors:
+The hook **fails closed** on anything that prevents a verdict:
 
-- If AI Guard API is unreachable → allow read
-- If file can't be read → allow (Claude will handle the error)
-- If API key is missing → allow (with error log)
+- AI Guard API unreachable, or any network error → **read blocked**
+- `AIGUARD_API_KEY` missing → **read blocked**
+- HTTP 200 carrying no `action` (e.g. `"Policy not found"`) → **read blocked**
 
-This prevents the hook from breaking Claude Code functionality if AI Guard is temporarily unavailable.
+This is a `PreToolUse` hook, so the read has not happened yet and can still be
+refused. Granting access to a credentials file that the policy never cleared is
+not this hook's decision to make.
+
+Two cases are deliberately **not** blocked, because they are not scan failures:
+
+- The path does not match any sensitive-file pattern → allowed without scanning
+- The file cannot be read at all → allowed, and Claude surfaces the real error
+
+Every block names its cause, so "not configured" is never mistaken for "this
+file is dangerous".
 
 ### File Size Limit
 
@@ -332,7 +342,7 @@ SENSITIVE_FILE_PATTERNS = [
 Set `AIGUARD_POLICY_ID` in your `.env`:
 
 ```
-AIGUARD_POLICY_ID=12345
+# AIGUARD_POLICY_ID=<id>
 ```
 
 This uses policy ID 12345 instead of auto-resolved policy.

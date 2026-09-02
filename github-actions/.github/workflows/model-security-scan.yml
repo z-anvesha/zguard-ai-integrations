@@ -50,7 +50,7 @@ jobs:
   # produce the expected ALLOW/BLOCK/DETECT outcomes. Exits non-zero if
   # any test case fails, blocking deployment.
   #
-  # Uses zscaler-sdk-python (LegacyZGuardClient) — the same SDK used by
+  # Uses zscaler-sdk-python (LegacyAIGuardClient) — the same SDK used by
   # the Anthropic, Cursor, and other integrations in this repository.
   #
   # Required secrets:

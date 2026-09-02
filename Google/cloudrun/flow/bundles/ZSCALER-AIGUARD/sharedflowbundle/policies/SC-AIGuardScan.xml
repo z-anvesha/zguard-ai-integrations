@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Calls the AI Guard detection API. The host is templated from
+  aiguard.cfg.endpoint so a proxy can select its cloud region (us1 default,
+  us2/eu1/eu2) via the aiguardCloud variable.
+
+  The path is resolve-and-execute-policy: with no policy id the API resolves the
+  policy bound to the API key, which is the recommended posture. A proxy that
+  pins aiguardPolicyId uses SC-AIGuardExecutePolicy instead.
+
+  continueOnError="true": a scanner failure must NOT hard-fault the proxy — it is
+  routed by JS-ProcessVerdict to the configured fail-open / fail-closed posture.
+-->
+<ServiceCallout continueOnError="true" enabled="true" name="SC-AIGuardScan">
+  <DisplayName>SC-AIGuardScan</DisplayName>
+  <Request variable="aiguardScanRequest">
+    <IgnoreUnresolvedVariables>false</IgnoreUnresolvedVariables>
+  </Request>
+  <Response>aiguardScanResponse</Response>
+  <Timeout>5000</Timeout>
+  <HTTPTargetConnection>
+    <URL>https://{aiguard.cfg.endpoint}/v1/detection/resolve-and-execute-policy</URL>
+    <Properties/>
+  </HTTPTargetConnection>
+</ServiceCallout>

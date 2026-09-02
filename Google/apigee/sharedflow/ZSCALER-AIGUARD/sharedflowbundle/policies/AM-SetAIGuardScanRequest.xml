@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Materialises the outbound HTTP request (aiguardScanRequest) for SC-AIGuardScan.
+  The body is the pre-built JSON string aiguardScanRequestBody, interpolated at
+  the message-body level so JSON.stringify's escaping is preserved and never
+  re-escaped. The detection API authenticates with a Bearer token.
+-->
+<AssignMessage continueOnError="false" enabled="true" name="AM-SetAIGuardScanRequest">
+  <DisplayName>AM-SetAIGuardScanRequest</DisplayName>
+  <Properties/>
+  <AssignTo createNew="true" transport="http" type="request">aiguardScanRequest</AssignTo>
+  <Set>
+    <Verb>POST</Verb>
+    <Headers>
+      <Header name="Content-Type">application/json</Header>
+      <Header name="Accept">application/json</Header>
+      <Header name="Authorization">Bearer {aiguard.token}</Header>
+    </Headers>
+    <Payload contentType="application/json">{aiguardScanRequestBody}</Payload>
+  </Set>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+</AssignMessage>

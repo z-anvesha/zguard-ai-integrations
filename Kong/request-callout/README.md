@@ -99,7 +99,7 @@ This solution uses **Kong Konnect's** native `request-callout` plugin to provide
                                                                    ▼
 ┌──────────────┐    4. Scan Result               ┌─────────────────────────────────┐
 │              │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ▶ │                                 │
-│  Zscaler     │    {"action": "allow|block",    │     Security Decision           │
+│  Zscaler     │    {"action":"ALLOW|BLOCK|DETECT"} │  Security Decision           │
 │  AI Guard    │     "severity": "...",          │        Logic                    │
 │  DAS API     │     "detector_responses":{}}    │                                 │
 └──────────────┘                                 └──────────────┬──────────────────┘
@@ -148,7 +148,7 @@ This solution uses **Kong Konnect's** native `request-callout` plugin to provide
 1. **Request Interception**: Kong captures incoming AI API requests
 2. **Prompt Extraction**: Lua script extracts user prompts from request body (supports OpenAI format)
 3. **AI Guard Scan**: Content sent to AI Guard DAS API with `direction: IN`
-4. **Security Decision**: AI Guard returns `allow` or `block` action with detector results
+4. **Security Decision**: AI Guard returns `ALLOW`, `BLOCK` or the monitor-only `DETECT`, with detector results. Anything else — including a 200 carrying no action — is treated as no verdict and fails closed.
 5. **Enforcement**: Malicious requests blocked with detailed error response
 
 #### Phase 2: AI Service Call
@@ -213,13 +213,27 @@ local function escape_json_string(str)
     return '"' .. str .. '"'
 end
 
--- Build AI Guard DAS payload
-local tr_id = ngx.var.request_id or "kong-unknown"
-local full_json = string.format([[{
+-- Build AI Guard DAS payload.
+-- transactionId is camelCase, and the API only accepts a 36-character UUID —
+-- anything else is answered with a 500. ngx.var.request_id is not a UUID, so it
+-- is sent only when it happens to match; otherwise the API mints its own id.
+local tr_id = ngx.var.request_id
+local uuid_pattern =
+  "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$"
+
+local full_json
+if tr_id and tr_id:match(uuid_pattern) then
+  full_json = string.format([[{
   "content": %s,
   "direction": "IN",
-  "transaction_id": %s
+  "transactionId": %s
 }]], escape_json_string(user_prompt), escape_json_string(tr_id))
+else
+  full_json = string.format([[{
+  "content": %s,
+  "direction": "IN"
+}]], escape_json_string(user_prompt))
+end
 
 kong.ctx.shared.callouts.aiguard_request_scan.request.params.body = full_json
 ```
@@ -238,12 +252,20 @@ end
 local response_body = co.aiguard_request_scan.response.body
 kong.log.info("Raw AI Guard response: ", response_body)
 
-if response_body:match('"action"%s*:%s*"block"') then
+-- The API answers in UPPER case (ALLOW / BLOCK / DETECT). Match the verdict
+-- itself rather than the word "block", then fail closed on anything that is not
+-- an explicit ALLOW or the monitor-only DETECT — including a 200 that carried no
+-- action at all, which is how a soft failure such as "Policy not found" arrives.
+local action = response_body:match('"action"%s*:%s*"([%a_]+)"')
+action = action and action:upper() or nil
+
+if action ~= "ALLOW" and action ~= "DETECT" then
   kong.ctx.shared.aiguard_blocked = true
-  kong.log.warn("AI Guard blocking request")
+  kong.log.warn("AI Guard blocking request (action=", tostring(action), ")")
   return kong.response.exit(403, {
     error = "Request blocked by Zscaler AI Guard security scan",
-    details = "Malicious content detected in prompt"
+    details = action and ("Policy verdict: " .. action)
+                     or "Scan returned no verdict (fail-closed)"
   })
 end
 ```
@@ -271,17 +293,14 @@ kong.service.request.set_header("content-length", tostring(#body))
 **Scan Result Processing**:
 ```json
 {
-  "transaction_id": "kong-request-id",
-  "action": "allow",
-  "severity": "informational",
-  "direction": "IN",
-  "detector_responses": {
-    "prompt_injection": { "triggered": false, "action": "allow" },
-    "malware": { "triggered": false, "action": "allow" },
-    "dlp": { "triggered": false, "action": "allow" }
-  },
-  "policy_id": 12345,
-  "policy_name": "Default-Policy"
+  "transactionId": "86ef7919-29a4-4948-8cc3-14ef9bec9794",
+  "action": "ALLOW",
+  "severity": "NONE",
+  "policyName": "Default-Policy",
+  "detectorResponses": {
+    "prompt_injection": { "triggered": false, "action": "ALLOW" },
+    "pii":              { "triggered": false, "action": "ALLOW" }
+  }
 }
 ```
 
