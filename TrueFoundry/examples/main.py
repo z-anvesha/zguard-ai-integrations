@@ -77,11 +77,27 @@ def _extract_assistant_response(response_body: dict) -> str:
     return ""
 
 
-def _scan(content: str, direction: str, transaction_id: str):
+def _extract_user(context: Optional[RequestContext]) -> Optional[str]:
+    """Best-effort end-user identity from the TrueFoundry request context.
+
+    TrueFoundry populates ``context.user`` (a Subject) with the caller's
+    identity. We forward it to AI Guard so the user shows up on the dashboard.
+    Prefer the most human-meaningful field available — the slug is usually an
+    email/handle — falling back through display name and the stable subject id.
+    Returns None when no identity is present (subjectId defaults to "").
+    """
+    if context is None or context.user is None:
+        return None
+    u = context.user
+    return u.subjectSlug or u.subjectDisplayName or u.subjectId or None
+
+
+def _scan(content: str, direction: str, transaction_id: str, user: Optional[str] = None):
     result, response, error = client.policy_detection.resolve_and_execute_policy(
         content=content,
         direction=direction,
         transaction_id=transaction_id,
+        user=user,
     )
     if error:
         raise Exception(f"AI Guard API error: {error}")
@@ -158,7 +174,7 @@ def input_scan(request: InputGuardrailRequest):
         return None
 
     txn_id = str(uuid.uuid4())
-    result = _scan(content, "IN", txn_id)
+    result = _scan(content, "IN", txn_id, user=_extract_user(request.context))
 
     if _is_blocked(result):
         detail = _build_block_detail(result, "IN", txn_id)
@@ -182,7 +198,7 @@ def output_scan(request: OutputGuardrailRequest):
         return None
 
     txn_id = str(uuid.uuid4())
-    result = _scan(content, "OUT", txn_id)
+    result = _scan(content, "OUT", txn_id, user=_extract_user(request.context))
 
     if _is_blocked(result):
         detail = _build_block_detail(result, "OUT", txn_id)
