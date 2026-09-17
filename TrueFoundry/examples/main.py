@@ -10,6 +10,7 @@ Endpoints:
   GET  /health        — Health check
 """
 
+import logging
 import os
 import uuid
 
@@ -20,16 +21,34 @@ from typing import Optional
 from zscaler.aiguard.legacy import LegacyZGuardClientHelper
 
 app = FastAPI(title="Zscaler AI Guard Guardrail Server")
+logger = logging.getLogger("aiguard.guardrail")
 
 CLOUD = os.environ.get("AIGUARD_CLOUD", "us1")
 client = LegacyZGuardClientHelper(cloud=CLOUD)
 
 
 class Subject(BaseModel):
+    """The caller TrueFoundry attributes the request to.
+
+    Two shapes occur in practice. A human subject (``subjectType: "user"``)
+    carries ``email``, and its ``subjectSlug`` is that same email. A virtual
+    account (``subjectType: "virtualaccount"``) carries neither — only a slug
+    naming the service account, so there is no person to attribute unless the
+    calling application supplies one in ``RequestContext.metadata``.
+
+    Undeclared fields are dropped by pydantic, so every field we may read has
+    to be listed here. ``subjectDisplayName`` is kept for compatibility but
+    TrueFoundry does not send it; the display name arrives nested in
+    ``metadata.displayName``.
+    """
+
     subjectId: str = ""
     subjectType: str = "user"
     subjectSlug: Optional[str] = None
     subjectDisplayName: Optional[str] = None
+    email: Optional[str] = None
+    userName: Optional[str] = None
+    metadata: Optional[dict] = None
 
 
 class RequestContext(BaseModel):
@@ -80,16 +99,50 @@ def _extract_assistant_response(response_body: dict) -> str:
 def _extract_user(context: Optional[RequestContext]) -> Optional[str]:
     """Best-effort end-user identity from the TrueFoundry request context.
 
-    TrueFoundry populates ``context.user`` (a Subject) with the caller's
-    identity. We forward it to AI Guard so the user shows up on the dashboard.
-    Prefer the most human-meaningful field available — the slug is usually an
-    email/handle — falling back through display name and the stable subject id.
-    Returns None when no identity is present (subjectId defaults to "").
+    Prefer the identity that names a person, because that is what the AI Guard
+    dashboard is for. The order matters for service-account traffic: when an
+    application calls the gateway under a virtual account, ``context.user``
+    describes the *application*, and the only trace of the human is whatever
+    the application chose to put in ``context.metadata`` (NetApp's apps use
+    ``user_email``). Taking the subject slug first would attribute every one of
+    those requests to the same service account.
+
+    Returns None when no identity is present at all, in which case AI Guard
+    records no user — indistinguishable on the dashboard from the bug this
+    forwarding exists to fix, so the miss is logged.
     """
-    if context is None or context.user is None:
+    if context is None:
         return None
-    u = context.user
-    return u.subjectSlug or u.subjectDisplayName or u.subjectId or None
+
+    subject = context.user
+    subject_metadata = (subject.metadata if subject is not None else None) or {}
+    request_metadata = context.metadata or {}
+
+    candidates = (
+        # A human subject carries its email directly.
+        ("user.email", subject.email if subject else None),
+        # Service-account traffic: the app passes the human through separately.
+        ("metadata.user_email", request_metadata.get("user_email")),
+        # For a human this is the email again; for a virtual account, its name.
+        ("user.subjectSlug", subject.subjectSlug if subject else None),
+        ("user.userName", subject.userName if subject else None),
+        ("user.metadata.displayName", subject_metadata.get("displayName")),
+        ("user.subjectDisplayName", subject.subjectDisplayName if subject else None),
+        # Opaque id — last resort, but still better than an anonymous event.
+        ("user.subjectId", subject.subjectId if subject else None),
+    )
+
+    for source, value in candidates:
+        if value:
+            logger.debug("end-user identity resolved from %s", source)
+            return value
+
+    logger.warning(
+        "no end-user identity in request context (subjectType=%s); "
+        "AI Guard will record this detection with no user",
+        subject.subjectType if subject else None,
+    )
+    return None
 
 
 def _scan(content: str, direction: str, transaction_id: str, user: Optional[str] = None):
